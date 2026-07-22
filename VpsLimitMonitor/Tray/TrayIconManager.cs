@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using VpsLimitMonitor.Core;
+using VpsLimitMonitor.Update;
 using VpsLimitMonitor.Settings;
 
 namespace VpsLimitMonitor.Tray;
@@ -14,6 +15,10 @@ public class TrayIconManager
     private readonly NativeMenuItem _themeSystemItem;
     private readonly NativeMenuItem _themeLightItem;
     private readonly NativeMenuItem _themeDarkItem;
+    private readonly NativeMenuItem _update6HoursItem;
+    private readonly NativeMenuItem _updateDailyItem;
+    private readonly NativeMenuItem _updateWeeklyItem;
+    private readonly NativeMenuItem _updateNoneItem;
 
     public TrayIconManager(MonitorController controller)
     {
@@ -26,6 +31,27 @@ public class TrayIconManager
         var themeMenu = new NativeMenuItem("主题")
         {
             Menu = [_themeSystemItem, _themeLightItem, _themeDarkItem],
+        };
+
+        var checkUpdateItem = new NativeMenuItem($"立即检查（当前 {UpdateManager.LocalVersionText}）");
+        checkUpdateItem.Click += (_, _) => _ = _controller.CheckUpdateManuallyAsync();
+
+        _update6HoursItem = CreateUpdateIntervalItem("每 6 小时检查", "Every6Hours");
+        _updateDailyItem = CreateUpdateIntervalItem("每天检查", "Daily");
+        _updateWeeklyItem = CreateUpdateIntervalItem("每周检查", "Weekly");
+        _updateNoneItem = CreateUpdateIntervalItem("不自动检查", "None");
+
+        var updateMenu = new NativeMenuItem("自动更新")
+        {
+            Menu =
+            [
+                checkUpdateItem,
+                new NativeMenuItemSeparator(),
+                _update6HoursItem,
+                _updateDailyItem,
+                _updateWeeklyItem,
+                _updateNoneItem,
+            ],
         };
 
         var refreshItem = new NativeMenuItem("立即刷新");
@@ -51,6 +77,7 @@ public class TrayIconManager
 
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(themeMenu);
+        menu.Items.Add(updateMenu);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
 
@@ -64,6 +91,7 @@ public class TrayIconManager
 
         TrayIcon.SetIcons(Application.Current!, [_trayIcon]);
         UpdateThemeChecks();
+        UpdateUpdateIntervalChecks();
     }
 
     private NativeMenuItem CreateThemeItem(string header, string theme)
@@ -73,12 +101,28 @@ public class TrayIconManager
         return item;
     }
 
+    private NativeMenuItem CreateUpdateIntervalItem(string header, string interval)
+    {
+        var item = new NativeMenuItem(header) { ToggleType = MenuItemToggleType.Radio };
+        item.Click += (_, _) => _controller.SetUpdateCheckInterval(interval);
+        return item;
+    }
+
     public void UpdateThemeChecks()
     {
         var theme = SettingsManager.Settings.Theme;
         _themeSystemItem.IsChecked = theme == "System";
         _themeLightItem.IsChecked = theme == "Light";
         _themeDarkItem.IsChecked = theme == "Dark";
+    }
+
+    public void UpdateUpdateIntervalChecks()
+    {
+        var interval = SettingsManager.Settings.UpdateCheckInterval;
+        _update6HoursItem.IsChecked = interval == "Every6Hours";
+        _updateDailyItem.IsChecked = interval == "Daily";
+        _updateWeeklyItem.IsChecked = interval == "Weekly";
+        _updateNoneItem.IsChecked = interval == "None";
     }
 
     public void Update()

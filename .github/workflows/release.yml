@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Compute version from commit count
+        id: version
+        shell: pwsh
+        run: |
+          $count = git rev-list --count HEAD
+          "count=$count" >> $env:GITHUB_OUTPUT
+
+      - name: Publish
+        shell: pwsh
+        run: dotnet publish VpsLimitMonitor/VpsLimitMonitor.csproj -c Release -p:Version=${{ steps.version.outputs.count }}.0.0.0
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'stage'
+          robocopy bin $stage /MIR /XD Logs Config /XF *.pdb .gitkeep
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Compress-Archive -Path "$stage/*" -DestinationPath VpsLimitMonitor-win-x64.zip
+          Set-Content -Path version.txt -Value "${{ steps.version.outputs.count }}" -NoNewline -Encoding ascii
+          exit 0
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.version.outputs.count }}" VpsLimitMonitor-win-x64.zip version.txt --title "v${{ steps.version.outputs.count }}" --notes "Automated build of commit ${{ github.sha }}"

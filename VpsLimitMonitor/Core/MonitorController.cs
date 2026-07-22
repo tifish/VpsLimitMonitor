@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using VpsLimitMonitor.Providers;
 using VpsLimitMonitor.Settings;
 using VpsLimitMonitor.Tray;
+using VpsLimitMonitor.Update;
 using VpsLimitMonitor.Web;
 using ZLogger;
 
@@ -40,6 +41,7 @@ public class MonitorController
         McpDebug.McpDebugServer.Start(this);
 #endif
 
+        UpdateManager.Start(this);
         _ = PollLoopAsync();
         await Task.CompletedTask;
     }
@@ -220,6 +222,21 @@ public class MonitorController
         SettingsManager.Save();
         ApplyTheme();
         Tray.UpdateThemeChecks();
+    }
+
+    public void SetUpdateCheckInterval(string interval)
+    {
+        SettingsManager.Settings.UpdateCheckInterval = interval;
+        SettingsManager.Save();
+        Tray.UpdateUpdateIntervalChecks();
+    }
+
+    public async Task CheckUpdateManuallyAsync()
+    {
+        var result = await UpdateManager.CheckForUpdateAsync();
+        // 有新版本时更新流程自己会弹 Toast；这里只反馈无更新/失败的情况
+        if (!UpdateManager.Updating)
+            Alerts.ShowToast("检查更新", result);
     }
 
     public void Exit()

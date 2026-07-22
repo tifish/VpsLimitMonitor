@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using JeekTools;
 using Microsoft.Extensions.Logging;
 using VpsLimitMonitor.Core;
+using VpsLimitMonitor.Update;
 using VpsLimitMonitor.Providers;
 using VpsLimitMonitor.Settings;
 using ZLogger;
@@ -76,6 +77,19 @@ public static class McpDebugServer
         new(
             "get_alerts",
             "获取最近的报警记录",
+            EmptySchema()
+        ),
+        new(
+            "check_update",
+            "检查自动更新。baseUrl 可覆盖下载地址（以 / 结尾，用于本地模拟发布）；apply 为 true 时发现新版本会真正下载、退出并重启程序",
+            Schema(
+                ("baseUrl", "string", "覆盖版本与 zip 的下载基地址（调试用）"),
+                ("apply", "boolean", "是否实际执行更新，默认 false 仅检查")
+            )
+        ),
+        new(
+            "get_update_status",
+            "获取本地版本号、更新设置与最近一次检查结果",
             EmptySchema()
         ),
         new(
@@ -371,6 +385,39 @@ public static class McpDebugServer
                 return _controller.Alerts.RecentAlerts.Count == 0
                     ? "(no alerts)"
                     : string.Join("\n", _controller.Alerts.RecentAlerts);
+
+            case "check_update":
+            {
+                if (args?["baseUrl"]?.GetValue<string>() is { } baseUrl)
+                    UpdateManager.OverrideBaseUrl = baseUrl == "" ? null : baseUrl;
+                var apply = args?["apply"]?.GetValue<bool>() ?? false;
+                var result = await UpdateManager.CheckForUpdateAsync(apply);
+                return $"Result: {result}\nLocalVersion: {UpdateManager.LocalVersion}\n"
+                    + $"Updating: {UpdateManager.Updating}";
+            }
+
+            case "get_update_status":
+                return JsonSerializer.Serialize(
+                    new
+                    {
+                        localVersion = UpdateManager.LocalVersion,
+                        localVersionText = UpdateManager.LocalVersionText,
+                        overrideBaseUrl = UpdateManager.OverrideBaseUrl,
+                        updateCheckInterval = SettingsManager.Settings.UpdateCheckInterval,
+                        lastCheckResult = UpdateManager.LastCheckResult,
+                        updating = UpdateManager.Updating,
+                    },
+                    new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        Encoder = System
+                            .Text
+                            .Encodings
+                            .Web
+                            .JavaScriptEncoder
+                            .UnsafeRelaxedJsonEscaping,
+                    }
+                );
 
             default:
                 throw new InvalidOperationException($"Unknown tool: {name}");

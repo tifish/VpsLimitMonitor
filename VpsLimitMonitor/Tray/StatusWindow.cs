@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using VpsLimitMonitor.Core;
+using VpsLimitMonitor.Update;
 
 namespace VpsLimitMonitor.Tray;
 
@@ -116,6 +117,15 @@ public class StatusWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
+        footer.Children.Add(
+            new TextBlock
+            {
+                Text = UpdateManager.LocalVersionText,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.4,
+            }
+        );
+
         var refreshButton = new Button { Content = "立即刷新" };
         refreshButton.Click += (_, _) => _controller.TriggerRefresh();
         footer.Children.Add(refreshButton);
@@ -123,7 +133,7 @@ public class StatusWindow : Window
         if (_controller.LastRefresh is { } last)
         {
             footer.Children.Insert(
-                0,
+                1,
                 new TextBlock
                 {
                     Text = _controller.Refreshing ? "刷新中…" : $"更新于 {last:HH:mm:ss}",
