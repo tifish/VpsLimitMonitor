@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/JeekTools.NET/">
+    <Project Path="JeekTools.NET/JeekTools.csproj" />
+  </Folder>
+  <Project Path="VpsLimitMonitor/VpsLimitMonitor.csproj" />
+</Solution>

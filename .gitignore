@@ -1,0 +1,14 @@
+# Build outputs
+obj/
+bin/*
+!bin/.gitkeep
+
+# User-specific files
+*.user
+*.suo
+.vs/
+.idea/
+
+# Logs and runtime files
+Logs/
+Config/

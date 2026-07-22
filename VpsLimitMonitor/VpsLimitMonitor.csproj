@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <OutDir>..\bin</OutDir>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <CETCompat>false</CETCompat>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishDir>$(OutDir)</PublishDir>
+    <Configurations>Release;Debug</Configurations>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <PropertyGroup>
+    <BeautySharedRuntimeMode>False</BeautySharedRuntimeMode>
+    <!-- beauty into sub-directory, default is libs, quote with "" if contains space  -->
+    <BeautyLibsDir Condition="$(BeautySharedRuntimeMode) == 'True'">../Libs</BeautyLibsDir>
+    <BeautyLibsDir Condition="$(BeautySharedRuntimeMode) != 'True'">./Libs</BeautyLibsDir>
+    <!-- dlls that you don't want to be moved or can not be moved -->
+    <!-- <BeautyExcludes>dll1.dll;lib*;...</BeautyExcludes> -->
+    <!-- dlls that end users never needed, so hide them -->
+    <!-- <BeautyHiddens>hostfxr;hostpolicy;*.deps.json;*.runtimeconfig*.json</BeautyHiddens> -->
+    <!-- set to True if you want to disable -->
+    <DisableBeauty>False</DisableBeauty>
+    <!-- set to False if you want to beauty on build -->
+    <BeautyOnPublishOnly>False</BeautyOnPublishOnly>
+    <!-- DO NOT TOUCH THIS OPTION -->
+    <BeautyNoRuntimeInfo>False</BeautyNoRuntimeInfo>
+    <!-- set to True if you want to allow 3rd debuggers(like dnSpy) debugs the app -->
+    <BeautyEnableDebugging>False</BeautyEnableDebugging>
+    <!-- the patch can reduce the file count -->
+    <!-- set to False if you want to disable -->
+    <!-- SCD Mode Feature Only -->
+    <BeautyUsePatch>True</BeautyUsePatch>
+    <!-- valid values: Error|Detail|Info -->
+    <BeautyLogLevel>Info</BeautyLogLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <PackageReference Include="nulastudio.NetBeauty" Version="2.1.5" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.10" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\JeekTools.NET\JeekTools.csproj" />
+  </ItemGroup>
+</Project>

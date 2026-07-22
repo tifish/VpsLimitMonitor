@@ -1,0 +1,204 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
+using VpsLimitMonitor.Core;
+
+namespace VpsLimitMonitor.Tray;
+
+/// <summary>点击托盘图标弹出的状态面板，列出每台 VPS 的流量情况。</summary>
+public class StatusWindow : Window
+{
+    private readonly MonitorController _controller;
+
+    public StatusWindow(MonitorController controller)
+    {
+        _controller = controller;
+
+        Title = "VPS 流量监视器";
+        Width = 420;
+        SizeToContent = SizeToContent.Height;
+        CanResize = false;
+        ShowInTaskbar = false;
+        Topmost = true;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+
+        Deactivated += (_, _) => Hide();
+        Closing += (_, e) =>
+        {
+            e.Cancel = true;
+            Hide();
+        };
+    }
+
+    public void ShowNearTray()
+    {
+        Show();
+        Activate();
+
+        // 定位到主屏工作区右下角（托盘附近）
+        var screen = Screens.Primary;
+        if (screen == null)
+            return;
+
+        var wa = screen.WorkingArea;
+        var scale = RenderScaling;
+        var width = (int)(Bounds.Width * scale);
+        var height = (int)(Bounds.Height * scale);
+        Position = new PixelPoint(wa.Right - width - 12, wa.Bottom - height - 12);
+    }
+
+    public void Rebuild()
+    {
+        var root = new StackPanel { Margin = new Thickness(16), Spacing = 10 };
+
+        foreach (var account in _controller.Accounts)
+        {
+            var header = new DockPanel();
+            header.Children.Add(
+                new TextBlock
+                {
+                    Text = account.Config.Name,
+                    FontSize = 16,
+                    FontWeight = FontWeight.Bold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                }
+            );
+
+            if (!account.LoggedIn)
+            {
+                var loginButton = new Button
+                {
+                    Content = "重新登录",
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                };
+                loginButton.Click += (_, _) => _ = _controller.ShowLoginAsync(account);
+                DockPanel.SetDock(loginButton, Dock.Right);
+                header.Children.Insert(0, loginButton);
+            }
+
+            root.Children.Add(header);
+
+            if (!account.LoggedIn)
+            {
+                root.Children.Add(
+                    new TextBlock
+                    {
+                        Text = "登录已失效，请重新登录",
+                        Foreground = Brushes.OrangeRed,
+                    }
+                );
+            }
+            else if (account.Error != null)
+            {
+                root.Children.Add(
+                    new TextBlock
+                    {
+                        Text = $"刷新失败：{account.Error}",
+                        Foreground = Brushes.OrangeRed,
+                        TextWrapping = TextWrapping.Wrap,
+                    }
+                );
+            }
+            else if (account.Services.Count == 0)
+            {
+                root.Children.Add(new TextBlock { Text = "正在获取服务列表…" });
+            }
+
+            foreach (var svc in account.Services)
+                root.Children.Add(BuildServiceRow(svc));
+        }
+
+        var footer = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+
+        var refreshButton = new Button { Content = "立即刷新" };
+        refreshButton.Click += (_, _) => _controller.TriggerRefresh();
+        footer.Children.Add(refreshButton);
+
+        if (_controller.LastRefresh is { } last)
+        {
+            footer.Children.Insert(
+                0,
+                new TextBlock
+                {
+                    Text = _controller.Refreshing ? "刷新中…" : $"更新于 {last:HH:mm:ss}",
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Opacity = 0.6,
+                }
+            );
+        }
+
+        root.Children.Add(footer);
+        Content = new ScrollViewer { Content = root, MaxHeight = 640 };
+    }
+
+    private Control BuildServiceRow(ServiceState svc)
+    {
+        var panel = new StackPanel { Spacing = 3 };
+
+        var title = $"{svc.Service.Label}";
+        if (svc.Service.Ip != null)
+            title += $"  {svc.Service.Ip}";
+        if (svc.Traffic is { IsOnline: false })
+            title += "（关机）";
+        if (svc.Simulated)
+            title += "（模拟数据）";
+
+        panel.Children.Add(new TextBlock { Text = title, FontWeight = FontWeight.SemiBold });
+
+        if (svc.Traffic is { } traffic)
+        {
+            var usedPct = traffic.TotalGB > 0 ? traffic.UsedGB / traffic.TotalGB * 100 : 0;
+            var bar = new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Value = Math.Clamp(usedPct, 0, 100),
+                Height = 8,
+            };
+            if (
+                traffic.RemainingPercent
+                < Settings.SettingsManager.Settings.AlertRemainingPercent
+            )
+                bar.Foreground = Brushes.OrangeRed;
+            panel.Children.Add(bar);
+            var line =
+                $"已用 {traffic.UsedGB:F1} / {traffic.TotalGB:F0} GB"
+                + $" · 剩 {traffic.RemainingGB:F1} GB（{traffic.RemainingPercent:F1}%）";
+            panel.Children.Add(new TextBlock { Text = line, FontSize = 12 });
+
+            if (traffic.ResetNotice is { } reset)
+                panel.Children.Add(
+                    new TextBlock
+                    {
+                        Text = $"下次重置：{reset}",
+                        FontSize = 11,
+                        Opacity = 0.6,
+                    }
+                );
+        }
+        else if (svc.Error != null)
+        {
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Text = $"获取失败：{svc.Error}",
+                    Foreground = Brushes.OrangeRed,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                }
+            );
+        }
+        else
+        {
+            panel.Children.Add(new TextBlock { Text = "等待数据…", FontSize = 12, Opacity = 0.6 });
+        }
+
+        return panel;
+    }
+}
