@@ -65,16 +65,21 @@ public static class UpdateManager
         }
     }
 
+    // 并行 Debug 实例各用自己的暂存目录，避免争抢；按安装目录哈希命名，
+    // 同一安装位置反复启动不会累积新目录
+    private static readonly string TempRoot = Path.Combine(
+        Path.GetTempPath(),
+        $"{SettingsManager.AppName}-{Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(AppContext.BaseDirectory.ToLowerInvariant())
+            )
+        )[..8]}"
+    );
+
     private static AutoUpdater CreateUpdater()
     {
         var baseUrl = OverrideBaseUrl ?? ReleaseBaseUrl;
-
-        // 并行 Debug 实例各用自己的暂存目录，避免争抢
-        var tempRoot = Path.Combine(
-            Path.GetTempPath(),
-            $"{SettingsManager.AppName}-{Environment.ProcessId}"
-        );
-        Directory.CreateDirectory(tempRoot);
+        Directory.CreateDirectory(TempRoot);
 
         return new AutoUpdater(
             new AutoUpdaterOptions
@@ -84,7 +89,7 @@ public static class UpdateManager
                 VersionTxtUrl = baseUrl + "version.txt",
                 UserAgent = SettingsManager.AppName,
                 Disabled = LocalVersion == 0 && OverrideBaseUrl == null,
-                TempRoot = tempRoot,
+                TempRoot = TempRoot,
                 GetLocalVersion = () => LocalVersion,
                 // 覆盖地址用于本地模拟发布，此时允许开发版（版本 0）更新
                 MinimumValidLocalVersion = OverrideBaseUrl != null ? 0 : 10,

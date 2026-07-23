@@ -11,6 +11,8 @@ namespace VpsLimitMonitor.Tray;
 /// <summary>托盘图标：动态数字图标、tooltip、右键菜单。</summary>
 public class TrayIconManager
 {
+    private const string HomePageUrl = "https://github.com/tifish/VpsLimitMonitor";
+
     private readonly MonitorController _controller;
     private readonly TrayIcon _trayIcon;
     private readonly NativeMenuItem _themeSystemItem;
@@ -73,6 +75,12 @@ public class TrayIconManager
         var statusItem = new NativeMenuItem("状态面板");
         statusItem.Click += (_, _) => _controller.ToggleStatusWindow();
 
+        var aboutItem = new NativeMenuItem($"关于 VPS 流量监视器（{UpdateManager.LocalVersionText}）");
+        aboutItem.Click += (_, _) =>
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(HomePageUrl) { UseShellExecute = true }
+            );
+
         var exitItem = new NativeMenuItem("退出");
         exitItem.Click += (_, _) => _controller.Exit();
 
@@ -93,6 +101,7 @@ public class TrayIconManager
         menu.Items.Add(storageMenu);
         menu.Items.Add(updateMenu);
         menu.Items.Add(new NativeMenuItemSeparator());
+        menu.Items.Add(aboutItem);
         menu.Items.Add(exitItem);
 
         _trayIcon = new TrayIcon
