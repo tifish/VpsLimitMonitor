@@ -35,6 +35,9 @@ public class WebSession(string baseUrl, string profileName)
     /// <summary>登录窗口被用户关闭（隐藏）后触发。</summary>
     public event Action? LoginWindowClosed;
 
+    /// <summary>登录窗口可见期间页面完成一次导航（如登录成功跳转）后触发。</summary>
+    public event Action? LoginWindowNavigated;
+
     public bool IsLoginWindowVisible => _window?.IsVisible == true;
 
     public Task EnsureInitializedAsync()
@@ -92,6 +95,11 @@ public class WebSession(string baseUrl, string profileName)
         _controller.IsVisible = false;
         _webView = _controller.CoreWebView2;
         _webView.WebMessageReceived += OnWebMessageReceived;
+        _webView.NavigationCompleted += (_, e) =>
+        {
+            if (e.IsSuccess && IsLoginWindowVisible)
+                LoginWindowNavigated?.Invoke();
+        };
 
         Log.ZLogInformation($"WebView2 session initialized for {profileName} ({BaseUrl})");
     }

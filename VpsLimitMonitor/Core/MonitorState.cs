@@ -24,6 +24,12 @@ public class AccountState(AccountConfig config, WebSession session, IVpsProvider
     public List<ServiceState> Services { get; } = [];
     public bool LoggedIn { get; set; } = true;
     public bool LoginNotified { get; set; }
+
+    /// <summary>true 表示 MCP 调试接口模拟会话失效，刷新时直接按失效处理，直到 clear_simulation。</summary>
+    public bool SimulateExpired { get; set; }
+
+    /// <summary>登录窗口导航触发的登录探测正在进行，避免重入。</summary>
+    public bool CheckingLogin { get; set; }
     public DateTime? LastPoll { get; set; }
     public string? Error { get; set; }
 }

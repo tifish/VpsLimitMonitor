@@ -63,7 +63,7 @@ public static class McpDebugServer
         ),
         new(
             "simulate_session_expired",
-            "模拟会话失效（触发登录提醒流程）",
+            "模拟会话失效（触发登录提醒流程），刷新时该账号持续按失效处理，直到 clear_simulation",
             Schema(("account", "string", "账号名，省略为第一个账号"))
         ),
         new(
@@ -362,14 +362,18 @@ public static class McpDebugServer
 
             case "clear_simulation":
                 foreach (var acc in _controller.Accounts)
-                foreach (var svc in acc.Services)
-                    svc.Simulated = false;
+                {
+                    acc.SimulateExpired = false;
+                    foreach (var svc in acc.Services)
+                        svc.Simulated = false;
+                }
                 _controller.TriggerRefresh();
                 return "Simulation cleared, refresh triggered";
 
             case "simulate_session_expired":
             {
                 var account = FindAccount(args?["account"]?.GetValue<string>());
+                account.SimulateExpired = true;
                 account.LoggedIn = false;
                 account.LoginNotified = false;
                 _controller.Alerts.NotifyLoginNeeded(account);
@@ -512,6 +516,7 @@ public static class McpDebugServer
                 name = a.Config.Name,
                 baseUrl = a.Config.BaseUrl,
                 loggedIn = a.LoggedIn,
+                simulateExpired = a.SimulateExpired,
                 error = a.Error,
                 lastPoll = a.LastPoll?.ToString("yyyy-MM-dd HH:mm:ss"),
                 services = a.Services.Select(s => new

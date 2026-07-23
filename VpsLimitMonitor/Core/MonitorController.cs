@@ -57,6 +57,7 @@ public class MonitorController
             var provider = ProviderFactory.Create(config, session);
             var account = new AccountState(config, session, provider);
             session.LoginWindowClosed += () => _ = OnLoginWindowClosedAsync(account);
+            session.LoginWindowNavigated += () => _ = OnLoginWindowNavigatedAsync(account);
             Accounts.Add(account);
         }
     }
@@ -90,10 +91,13 @@ public class MonitorController
         Refreshing = true;
         try
         {
+            var anyRefreshed = false;
             foreach (var account in Accounts)
-                await RefreshAccountAsync(account);
+                anyRefreshed |= await RefreshAccountAsync(account);
 
-            LastRefresh = DateTime.Now;
+            // 全部账号都没刷到数据（如会话失效）时不更新时间，避免误导
+            if (anyRefreshed)
+                LastRefresh = DateTime.Now;
         }
         finally
         {
@@ -103,10 +107,14 @@ public class MonitorController
         }
     }
 
-    private async Task RefreshAccountAsync(AccountState account)
+    /// <summary>刷新单个账号，返回是否真正取到了数据。</summary>
+    private async Task<bool> RefreshAccountAsync(AccountState account)
     {
         try
         {
+            if (account.SimulateExpired)
+                throw new SessionExpiredException();
+
             await account.Session.EnsureInitializedAsync();
 
             if (account.Services.Count == 0)
@@ -147,17 +155,20 @@ public class MonitorController
             account.Error = null;
             account.LastPoll = DateTime.Now;
             Alerts.Evaluate(account);
+            return true;
         }
         catch (SessionExpiredException)
         {
             account.LoggedIn = false;
             Log.ZLogWarning($"{account.Config.Name}: session expired");
             Alerts.NotifyLoginNeeded(account);
+            return false;
         }
         catch (Exception ex)
         {
             account.Error = ex.Message;
             Log.ZLogError($"{account.Config.Name}: refresh failed: {ex}");
+            return false;
         }
     }
 
@@ -171,10 +182,43 @@ public class MonitorController
         await account.Session.ShowLoginWindowAsync(account.Provider.LoginUrl);
     }
 
+    private async Task OnLoginWindowNavigatedAsync(AccountState account)
+    {
+        // 登录窗口里每次页面跳转都探测一次：登录成功后无需等窗口关闭即恢复状态
+        if (account.LoggedIn || account.CheckingLogin)
+            return;
+
+        account.CheckingLogin = true;
+        try
+        {
+            if (!await account.Provider.IsLoggedInAsync())
+                return;
+        }
+        catch
+        {
+            return;
+        }
+        finally
+        {
+            account.CheckingLogin = false;
+        }
+
+        account.SimulateExpired = false;
+        if (await RefreshAccountAsync(account))
+        {
+            LastRefresh = DateTime.Now;
+            account.Session.HideLoginWindow();
+            Alerts.ShowToast("VPS 流量监视", $"{account.Config.Name} 登录成功，已恢复监控");
+        }
+        Tray.Update();
+        _statusWindow?.Rebuild();
+    }
+
     private async Task OnLoginWindowClosedAsync(AccountState account)
     {
         // 用户关掉登录窗口后立即重试抓取
-        await RefreshAccountAsync(account);
+        if (await RefreshAccountAsync(account))
+            LastRefresh = DateTime.Now;
         Tray.Update();
         _statusWindow?.Rebuild();
     }

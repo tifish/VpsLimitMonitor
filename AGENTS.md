@@ -25,7 +25,7 @@ App tools:
 - `refresh` — force a full poll now and return the latest status.
 - `simulate_traffic` — inject fake traffic (`usedGB`, optional `totalGB`, `account`, `serviceId`) to trigger alert logic; the injected value survives until `clear_simulation`.
 - `clear_simulation` — drop injected data and re-poll real data.
-- `simulate_session_expired` — mark an account as logged-out to test the login-needed flow.
+- `simulate_session_expired` — mark an account as logged-out to test the login-needed flow; refreshes keep treating it as expired until `clear_simulation`.
 - `show_login_window` — open the WebView2 login window for an account.
 - `set_settings` — change `pollIntervalMinutes` / `alertRemainingPercent`.
 - `get_alerts` — recent toast alert records (verifies alerts fired without watching the screen).
