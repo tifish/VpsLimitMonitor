@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.IO.Compression;
 using Avalonia.Threading;
 using JeekTools;
 using Microsoft.Extensions.Logging;
@@ -10,8 +8,9 @@ using ZLogger;
 namespace VpsLimitMonitor.Update;
 
 /// <summary>
-///     自动更新：拉取 GitHub Release 的 version.txt 与本地版本（commit 数量）比对，
-///     经镜像下载 zip 解压后，调用 PowerShell 脚本替换文件并重启，保留用户数据。
+///     自动更新：基于 JeekTools 的 AutoUpdater（version.txt 各镜像竞速比对版本、
+///     zip 镜像限速换源下载、应用内暂存校验），最后调用 bin 目录里的
+///     AutoUpdate.ps1 替换文件并重启，保留用户数据。
 /// </summary>
 public static class UpdateManager
 {
@@ -20,6 +19,7 @@ public static class UpdateManager
     private const string ReleaseBaseUrl =
         "https://github.com/tifish/VpsLimitMonitor/releases/latest/download/";
     private const string ZipName = "VpsLimitMonitor-win-x64.zip";
+    private const string ExeName = "VpsLimitMonitor.exe";
 
     /// <summary>调试用下载地址覆盖（以 / 结尾）。非空时开发版也执行检查与更新。</summary>
     public static string? OverrideBaseUrl { get; set; }
@@ -65,6 +65,33 @@ public static class UpdateManager
         }
     }
 
+    private static AutoUpdater CreateUpdater()
+    {
+        var baseUrl = OverrideBaseUrl ?? ReleaseBaseUrl;
+
+        // 并行 Debug 实例各用自己的暂存目录，避免争抢
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"{SettingsManager.AppName}-{Environment.ProcessId}"
+        );
+        Directory.CreateDirectory(tempRoot);
+
+        return new AutoUpdater(
+            new AutoUpdaterOptions
+            {
+                AppExeName = ExeName,
+                ReleaseZipUrl = baseUrl + ZipName,
+                VersionTxtUrl = baseUrl + "version.txt",
+                UserAgent = SettingsManager.AppName,
+                Disabled = LocalVersion == 0 && OverrideBaseUrl == null,
+                TempRoot = tempRoot,
+                GetLocalVersion = () => LocalVersion,
+                // 覆盖地址用于本地模拟发布，此时允许开发版（版本 0）更新
+                MinimumValidLocalVersion = OverrideBaseUrl != null ? 0 : 10,
+            }
+        );
+    }
+
     /// <summary>检查更新；apply 为 true 时发现新版本立即下载并重启更新。返回结果描述。</summary>
     public static async Task<string> CheckForUpdateAsync(bool apply = true)
     {
@@ -79,117 +106,53 @@ public static class UpdateManager
         if (Updating)
             return "更新已在进行中";
 
-        try
+        var updater = CreateUpdater();
+        var outcome = await updater.HasUpdateAsync();
+        switch (outcome)
         {
-            var baseUrl = OverrideBaseUrl ?? ReleaseBaseUrl;
-            var remoteVersion = await FetchRemoteVersionAsync(baseUrl);
-
-            if (remoteVersion <= LocalVersion)
-            {
-                LastCheckResult = $"已是最新版本（本地 {LocalVersionText}，远程 v{remoteVersion}）";
-                Log.ZLogInformation($"Update check: up to date (local {LocalVersion}, remote {remoteVersion})");
+            case UpdateCheckOutcome.UpToDate:
+                LastCheckResult =
+                    $"已是最新版本（本地 {LocalVersionText}，远程 v{updater.RemoteVersion}）";
                 return LastCheckResult;
-            }
 
-            LastCheckResult = $"发现新版本 v{remoteVersion}（当前 {LocalVersionText}）";
-            Log.ZLogInformation($"Update check: new version {remoteVersion} available (local {LocalVersion})");
-
-            if (apply)
-                await DownloadAndApplyAsync(baseUrl, remoteVersion);
-
-            return LastCheckResult;
+            case UpdateCheckOutcome.Failed:
+                LastCheckResult = $"检查更新失败：{updater.FailureReason}";
+                return LastCheckResult;
         }
-        catch (Exception ex)
-        {
-            LastCheckResult = $"检查更新失败：{ex.Message}";
-            Log.ZLogWarning($"Update check failed: {ex.Message}");
-            return LastCheckResult;
-        }
+
+        LastCheckResult = $"发现新版本 v{updater.RemoteVersion}（当前 {LocalVersionText}）";
+        if (apply)
+            await DownloadAndApplyAsync(updater);
+
+        return LastCheckResult;
     }
 
-    private static async Task<int> FetchRemoteVersionAsync(string baseUrl)
-    {
-        Exception? lastError = null;
-        foreach (var url in GitHubMirrors.GetMirrors(baseUrl + "version.txt").Distinct())
-        {
-            try
-            {
-                using var client = HttpHelper.GetHttpClient();
-                client.Timeout = TimeSpan.FromSeconds(15);
-                var text = await client.GetStringAsync(url);
-                return int.Parse(text.Trim());
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-        }
-
-        throw new InvalidOperationException($"无法获取 version.txt：{lastError?.Message}");
-    }
-
-    private static async Task DownloadAndApplyAsync(string baseUrl, int remoteVersion)
+    private static async Task DownloadAndApplyAsync(AutoUpdater updater)
     {
         Updating = true;
         try
         {
-            var zipUrl = baseUrl + ZipName;
-            var mirrorUrl = await GitHubMirrors.GetFastestMirror(zipUrl);
-            if (mirrorUrl == "")
-                mirrorUrl = zipUrl;
-
-            var updateDir = Path.Combine(Path.GetTempPath(), "VpsLimitMonitor-Update");
-            if (Directory.Exists(updateDir))
-                Directory.Delete(updateDir, true);
-            Directory.CreateDirectory(updateDir);
-
-            Log.ZLogInformation($"Downloading update from {mirrorUrl}");
-            var zipPath = Path.Combine(updateDir, ZipName);
-            using (var client = HttpHelper.GetHttpClient())
+            var stagedDir = await updater.DownloadAndStageAsync();
+            if (stagedDir == null)
             {
-                client.Timeout = TimeSpan.FromMinutes(10);
-                await using var source = await client.GetStreamAsync(mirrorUrl);
-                await using var target = File.Create(zipPath);
-                await source.CopyToAsync(target);
+                LastCheckResult = $"下载更新失败：{updater.FailureReason}";
+                Updating = false;
+                return;
             }
-
-            var payloadDir = Path.Combine(updateDir, "Payload");
-            ZipFile.ExtractToDirectory(zipPath, payloadDir);
-            File.Delete(zipPath);
-
-            var scriptPath = Path.Combine(updateDir, "Update.ps1");
-            await File.WriteAllTextAsync(scriptPath, UpdateScript);
 
             _controller.Alerts.ShowToast(
                 "VPS 流量监视器",
-                $"正在更新到 v{remoteVersion}，程序将自动重启"
+                $"正在更新到 v{updater.RemoteVersion}，程序将自动重启"
             );
-            Log.ZLogInformation($"Launching update script for v{remoteVersion}");
 
-            Process.Start(
-                new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    ArgumentList =
-                    {
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        scriptPath,
-                        "-ProcessId",
-                        Environment.ProcessId.ToString(),
-                        "-AppDir",
-                        AppContext.BaseDirectory,
-                        "-PayloadDir",
-                        payloadDir,
-                        "-ExePath",
-                        Environment.ProcessPath!,
-                    },
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                }
-            );
+            if (!updater.LaunchInstall(stagedDir))
+            {
+                LastCheckResult = "启动更新脚本失败";
+                Updating = false;
+                return;
+            }
+
+            Log.ZLogInformation($"Update launched for v{updater.RemoteVersion}, exiting");
 
             // 留出时间让调用方（托盘/MCP）拿到返回结果后再退出
             await Task.Delay(1000);
@@ -201,13 +164,4 @@ public static class UpdateManager
             throw;
         }
     }
-
-    // 等待进程退出后镜像同步新文件（清理旧版本多余文件，保留日志与便携配置），再重启
-    private const string UpdateScript = """
-        param([int]$ProcessId, [string]$AppDir, [string]$PayloadDir, [string]$ExePath)
-        Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue
-        robocopy $PayloadDir $AppDir /MIR /XD Logs Config /R:10 /W:1 | Out-Null
-        Start-Process $ExePath -WorkingDirectory $AppDir
-        Remove-Item $PSScriptRoot -Recurse -Force -ErrorAction SilentlyContinue
-        """;
 }

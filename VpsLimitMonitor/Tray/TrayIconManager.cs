@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using JeekTools;
 using VpsLimitMonitor.Core;
 using VpsLimitMonitor.Update;
 using VpsLimitMonitor.Settings;
@@ -19,6 +20,9 @@ public class TrayIconManager
     private readonly NativeMenuItem _updateDailyItem;
     private readonly NativeMenuItem _updateWeeklyItem;
     private readonly NativeMenuItem _updateNoneItem;
+    private readonly NativeMenuItem _storageDefaultItem;
+    private readonly NativeMenuItem _storagePortableItem;
+    private readonly NativeMenuItem _storageCustomItem;
 
     public TrayIconManager(MonitorController controller)
     {
@@ -54,6 +58,15 @@ public class TrayIconManager
             ],
         };
 
+        _storageDefaultItem = CreateStorageItem("默认（AppData）", StorageLocation.UserDirectory);
+        _storagePortableItem = CreateStorageItem("便携（程序目录）", StorageLocation.ProgramDirectory);
+        _storageCustomItem = CreateStorageItem("自定义目录…", StorageLocation.CustomDirectory);
+
+        var storageMenu = new NativeMenuItem("配置存储")
+        {
+            Menu = [_storageDefaultItem, _storagePortableItem, _storageCustomItem],
+        };
+
         var refreshItem = new NativeMenuItem("立即刷新");
         refreshItem.Click += (_, _) => _controller.TriggerRefresh();
 
@@ -77,6 +90,7 @@ public class TrayIconManager
 
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(themeMenu);
+        menu.Items.Add(storageMenu);
         menu.Items.Add(updateMenu);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
@@ -92,6 +106,22 @@ public class TrayIconManager
         TrayIcon.SetIcons(Application.Current!, [_trayIcon]);
         UpdateThemeChecks();
         UpdateUpdateIntervalChecks();
+        UpdateStorageChecks();
+    }
+
+    private NativeMenuItem CreateStorageItem(string header, StorageLocation location)
+    {
+        var item = new NativeMenuItem(header) { ToggleType = MenuItemToggleType.Radio };
+        item.Click += (_, _) => _ = _controller.SwitchStorageLocationAsync(location);
+        return item;
+    }
+
+    public void UpdateStorageChecks()
+    {
+        var location = SettingsManager.Location;
+        _storageDefaultItem.IsChecked = location == StorageLocation.UserDirectory;
+        _storagePortableItem.IsChecked = location == StorageLocation.ProgramDirectory;
+        _storageCustomItem.IsChecked = location == StorageLocation.CustomDirectory;
     }
 
     private NativeMenuItem CreateThemeItem(string header, string theme)

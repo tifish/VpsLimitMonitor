@@ -2,7 +2,7 @@
   "mcpServers": {
     "vpslimitmonitor-debug": {
       "type": "http",
-      "url": "http://127.0.0.1:28217/mcp"
+      "url": "http://localhost:28217/mcp"
     }
   }
 }

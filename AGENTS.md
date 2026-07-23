@@ -11,7 +11,11 @@
 
 ## Debug MCP Interface
 
-Debug builds start an MCP server at `http://127.0.0.1:28217/mcp` (Streamable HTTP, registered in `.mcp.json` as `vpslimitmonitor-debug`). Use it to test features without touching the UI:
+Debug builds start an MCP server (JeekTools `DebugMcpHost`) at `http://localhost:28217/mcp` (Streamable HTTP, registered in `.mcp.json` as `vpslimitmonitor-debug`). Ports are scanned upward from 28217 when taken (parallel worktrees get different ports; override with the `VPSLIMITMONITOR_MCP_PORT` env var); each instance writes a discovery file with its URL and pid to `%LOCALAPPDATA%\VpsLimitMonitor\DebugMcp\<pid>.json`.
+
+Standard object-path tools from `DebugMcpHost` (roots: `Controller`, `Settings`, `App`): `describe`, `get_value`, `set_value`, `invoke`, `list_members`, `read_logs`.
+
+App tools:
 
 - `get_status` — full dump of accounts, services, traffic, alerts, and settings.
 - `refresh` — force a full poll now and return the latest status.
@@ -23,3 +27,5 @@ Debug builds start an MCP server at `http://127.0.0.1:28217/mcp` (Streamable HTT
 - `get_alerts` — recent toast alert records (verifies alerts fired without watching the screen).
 - `check_update` — check auto-update; `baseUrl` overrides the download base (point it at a local server to simulate a release), `apply: true` actually downloads, exits, and restarts the app.
 - `get_update_status` — local version, update settings, and last check result.
+- `get_storage_info` — settings storage mode and candidate directories.
+- `set_storage_mode` — switch settings storage (UserDirectory / ProgramDirectory / CustomDirectory) without UI dialogs; `moveFiles` defaults to true.

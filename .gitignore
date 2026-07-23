@@ -4,6 +4,7 @@ bin/*
 !bin/.gitkeep
 !bin/Setup.cmd
 !bin/dotnet-install.ps1
+!bin/AutoUpdate.ps1
 
 # User-specific files
 *.user

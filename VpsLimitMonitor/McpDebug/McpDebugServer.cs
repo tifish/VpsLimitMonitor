@@ -1,35 +1,40 @@
 #if DEBUG
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using JeekTools;
 using Microsoft.Extensions.Logging;
 using VpsLimitMonitor.Core;
-using VpsLimitMonitor.Update;
 using VpsLimitMonitor.Providers;
 using VpsLimitMonitor.Settings;
+using VpsLimitMonitor.Update;
 using ZLogger;
 
 namespace VpsLimitMonitor.McpDebug;
 
 /// <summary>
-///     Debug 版专用的 MCP 调试接口（Streamable HTTP，仅 127.0.0.1）。
-///     供 AI 查询内部状态、强制刷新、注入模拟流量来测试报警等。
+///     Debug 版专用的 MCP 调试接口，基于 JeekTools 的 DebugMcpHost + ObjectGraph：
+///     标准工具（describe / get_value / set_value / invoke / list_members / read_logs）
+///     加应用工具，端口从 28217 起扫描并写发现文件。
 /// </summary>
 public static class McpDebugServer
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(McpDebugServer));
 
-    public const int Port = 28217;
+    public const int DefaultPort = 28217;
 
     private static MonitorController _controller = null!;
-    private static HttpListener? _listener;
+    private static DebugMcpHost? _host;
+
+    private static string DiscoveryDir =>
+        Path.Combine(SettingsManager.Storage.LocalDir, "DebugMcp");
 
     private record ToolDef(string Name, string Description, JsonObject InputSchema);
 
-    private static readonly List<ToolDef> Tools =
+    private static readonly List<ToolDef> AppTools =
     [
         new(
             "get_status",
@@ -93,6 +98,20 @@ public static class McpDebugServer
             EmptySchema()
         ),
         new(
+            "get_storage_info",
+            "获取配置存储模式与各候选目录",
+            EmptySchema()
+        ),
+        new(
+            "set_storage_mode",
+            "切换配置存储模式（绕过 UI 对话框，测试用）",
+            Schema(
+                ("location", "string", "UserDirectory | ProgramDirectory | CustomDirectory"),
+                ("customDir", "string", "自定义基目录，location 为 CustomDirectory 时必填"),
+                ("moveFiles", "boolean", "是否移动现有 Config 目录，默认 true")
+            )
+        ),
+        new(
             "fetch_url",
             "用账号会话 fetch 一个同站 URL，返回状态、最终 URL 和响应体（调试用）",
             Schema(
@@ -106,186 +125,198 @@ public static class McpDebugServer
     public static void Start(MonitorController controller)
     {
         _controller = controller;
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/mcp/");
 
-        try
-        {
-            _listener.Start();
-        }
-        catch (Exception ex)
-        {
-            Log.ZLogError($"MCP debug server failed to start: {ex.Message}");
-            return;
-        }
-
-        _ = Task.Run(ListenLoopAsync);
-        Log.ZLogInformation($"MCP debug server listening on http://127.0.0.1:{Port}/mcp");
-    }
-
-    private static async Task ListenLoopAsync()
-    {
-        while (_listener is { IsListening: true })
-        {
-            HttpListenerContext context;
-            try
+        var graph = new ObjectGraph(
+            new ObjectGraphOptions
             {
-                context = await _listener.GetContextAsync();
-            }
-            catch (Exception)
-            {
-                break;
-            }
-
-            _ = Task.Run(() => HandleRequestAsync(context));
-        }
-    }
-
-    private static async Task HandleRequestAsync(HttpListenerContext context)
-    {
-        try
-        {
-            var request = context.Request;
-            var response = context.Response;
-
-            if (request.HttpMethod == "DELETE")
-            {
-                response.StatusCode = 200;
-                response.Close();
-                return;
-            }
-
-            if (request.HttpMethod != "POST")
-            {
-                response.StatusCode = 405;
-                response.Close();
-                return;
-            }
-
-            using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
-            var body = await reader.ReadToEndAsync();
-            var message = JsonNode.Parse(body)!.AsObject();
-
-            var method = message["method"]?.GetValue<string>() ?? "";
-            var id = message["id"];
-
-            // 通知消息无需应答内容
-            if (id == null)
-            {
-                response.StatusCode = 202;
-                response.Close();
-                return;
-            }
-
-            JsonNode result;
-            try
-            {
-                result = await DispatchAsync(method, message["params"]?.AsObject());
-            }
-            catch (Exception ex)
-            {
-                await WriteJsonAsync(
-                    response,
-                    new JsonObject
-                    {
-                        ["jsonrpc"] = "2.0",
-                        ["id"] = id.DeepClone(),
-                        ["error"] = new JsonObject
-                        {
-                            ["code"] = -32603,
-                            ["message"] = ex.Message,
-                        },
-                    }
-                );
-                return;
-            }
-
-            await WriteJsonAsync(
-                response,
-                new JsonObject
+                ResolveRoot = name => name switch
                 {
-                    ["jsonrpc"] = "2.0",
-                    ["id"] = id.DeepClone(),
-                    ["result"] = result,
-                }
+                    "Controller" => _controller,
+                    "Settings" => SettingsManager.Settings,
+                    "App" => Application.Current
+                        ?? throw new InvalidOperationException("App not initialized"),
+                    _ => throw new InvalidOperationException(
+                        $"Unknown root: {name}. Roots: Controller, Settings, App"
+                    ),
+                },
+                RootNamesHelp = "Controller, Settings, App",
+                FindNamedChild = (parent, name) =>
+                    (parent as Visual)
+                        ?.GetVisualDescendants()
+                        .OfType<Control>()
+                        .FirstOrDefault(c => c.Name == name),
+            }
+        );
+
+        _host = new DebugMcpHost(
+            new DebugMcpHostOptions
+            {
+                ServerName = "vpslimitmonitor-debug",
+                ServerTitle = "VpsLimitMonitor Debug",
+                Graph = graph,
+                GetVersion = () => UpdateManager.LocalVersion.ToString(),
+                DefaultPort = DefaultPort,
+                PortScanCount = 20,
+                PortEnvironmentVariable = "VPSLIMITMONITOR_MCP_PORT",
+                UiInvoker = async func =>
+                    await Dispatcher
+                        .UIThread.InvokeAsync(func)
+                        .GetTask()
+                        .WaitAsync(TimeSpan.FromSeconds(15)),
+                Describe = () =>
+                    "VPS 流量监视器调试接口。对象路径根：Controller（主控制器，含 Accounts/Alerts/Tray）、"
+                    + "Settings（当前设置）、App（Avalonia Application）。"
+                    + $"应用工具：{string.Join(", ", AppTools.Select(t => t.Name))}。",
+                ToolListProvider = BuildToolList,
+                UrlChanged = OnUrlChanged,
+            }
+        );
+
+        foreach (var tool in AppTools)
+        {
+            var name = tool.Name;
+            _host.AddTool(
+                name,
+                async args =>
+                    DebugMcpHost.ToolText(
+                        await Dispatcher
+                            .UIThread.InvokeAsync(() => CallToolAsync(name, args))
+                            .WaitAsync(TimeSpan.FromSeconds(120))
+                    )
+            );
+        }
+
+        CleanStaleDiscoveryFiles();
+        _host.Start();
+    }
+
+    public static void Stop()
+    {
+        _host?.Stop();
+    }
+
+    private static string DiscoveryFilePath =>
+        Path.Combine(DiscoveryDir, $"{Environment.ProcessId}.json");
+
+    private static void OnUrlChanged(string url)
+    {
+        try
+        {
+            if (url == "")
+            {
+                File.Delete(DiscoveryFilePath);
+                return;
+            }
+
+            Directory.CreateDirectory(DiscoveryDir);
+            File.WriteAllText(
+                DiscoveryFilePath,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        url,
+                        pid = Environment.ProcessId,
+                        baseDirectory = AppContext.BaseDirectory,
+                        startTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }
+                )
             );
         }
         catch (Exception ex)
         {
-            Log.ZLogError($"MCP request failed: {ex.Message}");
-            try
-            {
-                context.Response.StatusCode = 500;
-                context.Response.Close();
-            }
-            catch
-            {
-                // ignored
-            }
+            Log.ZLogWarning($"Failed to update MCP discovery file: {ex.Message}");
         }
     }
 
-    private static async Task WriteJsonAsync(HttpListenerResponse response, JsonObject payload)
+    private static void CleanStaleDiscoveryFiles()
     {
-        var bytes = Encoding.UTF8.GetBytes(payload.ToJsonString());
-        response.StatusCode = 200;
-        response.ContentType = "application/json";
-        response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
-        response.Close();
-    }
-
-    private static async Task<JsonNode> DispatchAsync(string method, JsonObject? params_)
-    {
-        switch (method)
+        try
         {
-            case "initialize":
-                return new JsonObject
-                {
-                    ["protocolVersion"] =
-                        params_?["protocolVersion"]?.GetValue<string>() ?? "2025-06-18",
-                    ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
-                    ["serverInfo"] = new JsonObject
-                    {
-                        ["name"] = "VpsLimitMonitor Debug",
-                        ["version"] = "1.0",
-                    },
-                };
+            if (!Directory.Exists(DiscoveryDir))
+                return;
 
-            case "ping":
-                return new JsonObject();
-
-            case "tools/list":
+            foreach (var file in Directory.GetFiles(DiscoveryDir, "*.json"))
             {
-                var tools = new JsonArray();
-                foreach (var tool in Tools)
-                    tools.Add(
-                        new JsonObject
-                        {
-                            ["name"] = tool.Name,
-                            ["description"] = tool.Description,
-                            ["inputSchema"] = tool.InputSchema.DeepClone(),
-                        }
-                    );
-                return new JsonObject { ["tools"] = tools };
-            }
+                if (!int.TryParse(Path.GetFileNameWithoutExtension(file), out var pid))
+                    continue;
 
-            case "tools/call":
-            {
-                var name = params_?["name"]?.GetValue<string>() ?? "";
-                var args = params_?["arguments"]?.AsObject();
-                var text = await Dispatcher.UIThread.InvokeAsync(() => CallToolAsync(name, args));
-                return new JsonObject
+                try
                 {
-                    ["content"] = new JsonArray(
-                        new JsonObject { ["type"] = "text", ["text"] = text }
-                    ),
-                };
+                    System.Diagnostics.Process.GetProcessById(pid);
+                }
+                catch (ArgumentException)
+                {
+                    File.Delete(file);
+                }
             }
-
-            default:
-                throw new InvalidOperationException($"Unknown method: {method}");
         }
+        catch
+        {
+            // 清理失败不影响启动
+        }
+    }
+
+    private static JsonArray BuildToolList()
+    {
+        var tools = new JsonArray();
+
+        void Add(string name, string description, JsonObject schema)
+        {
+            tools.Add(
+                new JsonObject
+                {
+                    ["name"] = name,
+                    ["description"] = description,
+                    ["inputSchema"] = schema,
+                }
+            );
+        }
+
+        Add("describe", "描述本调试接口、对象路径根与可用工具", EmptySchema());
+        Add(
+            "get_value",
+            "按对象路径读取值，如 Controller.Accounts[0].LoggedIn",
+            Schema(
+                ("path", "string", "对象路径（必填），根：Controller / Settings / App"),
+                ("depth", "number", "展开深度 0-5，默认 1")
+            )
+        );
+        Add(
+            "set_value",
+            "按对象路径写入属性、字段或列表元素",
+            Schema(
+                ("path", "string", "对象路径（必填）"),
+                ("value", "string", "新值（JSON，任意类型）")
+            )
+        );
+        Add(
+            "invoke",
+            "按对象路径调用方法或 ICommand（在 UI 线程上执行）",
+            Schema(
+                ("path", "string", "方法路径（必填），如 Controller.TriggerRefresh"),
+                ("args", "array", "参数数组，支持 {\"$path\": ...} 活对象引用"),
+                ("depth", "number", "结果展开深度 0-5，默认 1")
+            )
+        );
+        Add(
+            "list_members",
+            "列出对象路径处的成员（属性、字段、方法）",
+            Schema(("path", "string", "对象路径（必填）"))
+        );
+        Add(
+            "read_logs",
+            "读取应用日志尾部",
+            Schema(
+                ("lines", "number", "行数，默认 200，最大 2000"),
+                ("filter", "string", "只保留包含此子串的行")
+            )
+        );
+
+        foreach (var tool in AppTools)
+            Add(tool.Name, tool.Description, (JsonObject)tool.InputSchema.DeepClone());
+
+        return tools;
     }
 
     private static async Task<string> CallToolAsync(string name, JsonObject? args)
@@ -364,6 +395,42 @@ public static class McpDebugServer
                 return JsonSerializer.Serialize(SettingsManager.Settings);
             }
 
+            case "get_storage_info":
+                return JsonSerializer.Serialize(
+                    new
+                    {
+                        location = SettingsManager.Location.ToString(),
+                        roamingConfigDir = SettingsManager.RoamingConfigDir,
+                        customDir = SettingsManager.CustomDir,
+                        localConfigDir = SettingsManager.Storage.LocalConfigDir,
+                        programConfigDir = SettingsManager.Storage.ProgramConfigDir,
+                        isPortableForced = SettingsManager.Storage.IsPortable,
+                    },
+                    PrettyJson
+                );
+
+            case "set_storage_mode":
+            {
+                var locationText =
+                    args?["location"]?.GetValue<string>()
+                    ?? throw new InvalidOperationException("location is required");
+                if (!Enum.TryParse<StorageLocation>(locationText, true, out var location))
+                    throw new InvalidOperationException(
+                        "location must be UserDirectory | ProgramDirectory | CustomDirectory"
+                    );
+
+                var customDir = args?["customDir"]?.GetValue<string>();
+                if (location == StorageLocation.CustomDirectory && string.IsNullOrEmpty(customDir))
+                    throw new InvalidOperationException(
+                        "customDir is required for CustomDirectory"
+                    );
+
+                var moveFiles = args?["moveFiles"]?.GetValue<bool>() ?? true;
+                SettingsManager.SwitchStorageLocation(location, customDir, moveFiles);
+                _controller.Tray.UpdateStorageChecks();
+                return $"Storage switched to {SettingsManager.Location}: {SettingsManager.RoamingConfigDir}";
+            }
+
             case "fetch_url":
             {
                 var account = FindAccount(args?["account"]?.GetValue<string>());
@@ -407,22 +474,19 @@ public static class McpDebugServer
                         lastCheckResult = UpdateManager.LastCheckResult,
                         updating = UpdateManager.Updating,
                     },
-                    new JsonSerializerOptions
-                    {
-                        WriteIndented = true,
-                        Encoder = System
-                            .Text
-                            .Encodings
-                            .Web
-                            .JavaScriptEncoder
-                            .UnsafeRelaxedJsonEscaping,
-                    }
+                    PrettyJson
                 );
 
             default:
                 throw new InvalidOperationException($"Unknown tool: {name}");
         }
     }
+
+    private static readonly JsonSerializerOptions PrettyJson = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     private static AccountState FindAccount(string? name)
     {
@@ -442,6 +506,7 @@ public static class McpDebugServer
             lastRefresh = _controller.LastRefresh?.ToString("yyyy-MM-dd HH:mm:ss"),
             refreshing = _controller.Refreshing,
             settings = SettingsManager.Settings,
+            storageLocation = SettingsManager.Location.ToString(),
             accounts = _controller.Accounts.Select(a => new
             {
                 name = a.Config.Name,
@@ -470,14 +535,7 @@ public static class McpDebugServer
             recentAlerts = _controller.Alerts.RecentAlerts.TakeLast(10),
         };
 
-        return JsonSerializer.Serialize(
-            payload,
-            new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            }
-        );
+        return JsonSerializer.Serialize(payload, PrettyJson);
     }
 
     private static JsonObject EmptySchema()

@@ -1,5 +1,7 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using JeekTools;
@@ -229,6 +231,99 @@ public class MonitorController
         SettingsManager.Settings.UpdateCheckInterval = interval;
         SettingsManager.Save();
         Tray.UpdateUpdateIntervalChecks();
+    }
+
+    public async Task SwitchStorageLocationAsync(StorageLocation location)
+    {
+        if (location == SettingsManager.Location && location != StorageLocation.CustomDirectory)
+        {
+            Tray.UpdateStorageChecks();
+            return;
+        }
+
+        string? customDir = null;
+        if (location == StorageLocation.CustomDirectory)
+        {
+            customDir = await PickFolderAsync("选择配置存储目录");
+            if (customDir == null)
+            {
+                Tray.UpdateStorageChecks();
+                return;
+            }
+        }
+
+        var newConfigDir = SettingsManager.Storage.ResolveConfigRoot(location, customDir);
+        bool moveFiles;
+        if (SettingsManager.Location == StorageLocation.ProgramDirectory)
+        {
+            // 便携模式下程序目录的 Config 会强制便携，离开时必须移动
+            var choice = await ConfirmDialog.ShowAsync(
+                "切换配置存储",
+                $"离开便携模式必须移动配置文件，否则下次启动仍会回到便携模式。\n\n新位置：{newConfigDir}",
+                "移动并切换",
+                "取消"
+            );
+            if (choice != 0)
+            {
+                Tray.UpdateStorageChecks();
+                return;
+            }
+            moveFiles = true;
+        }
+        else
+        {
+            var choice = await ConfirmDialog.ShowAsync(
+                "切换配置存储",
+                $"是否将现有配置文件移动到新位置？\n\n新位置：{newConfigDir}",
+                "移动",
+                "不移动",
+                "取消"
+            );
+            if (choice is null or 2)
+            {
+                Tray.UpdateStorageChecks();
+                return;
+            }
+            moveFiles = choice == 0;
+        }
+
+        try
+        {
+            SettingsManager.SwitchStorageLocation(location, customDir, moveFiles);
+            Alerts.ShowToast("配置存储", $"已切换到：{SettingsManager.RoamingConfigDir}");
+        }
+        catch (Exception ex)
+        {
+            Log.ZLogError($"Failed to switch storage location: {ex}");
+            Alerts.ShowToast("配置存储", $"切换失败：{ex.Message}");
+        }
+
+        Tray.UpdateStorageChecks();
+    }
+
+    private static async Task<string?> PickFolderAsync(string title)
+    {
+        // 文件夹选择器需要 TopLevel，托盘应用临时开一个不可见窗口承载
+        var owner = new Window
+        {
+            Width = 1,
+            Height = 1,
+            Opacity = 0,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        owner.Show();
+        try
+        {
+            var result = await owner.StorageProvider.OpenFolderPickerAsync(
+                new FolderPickerOpenOptions { Title = title, AllowMultiple = false }
+            );
+            return result.Count > 0 ? result[0].Path.LocalPath : null;
+        }
+        finally
+        {
+            owner.Close();
+        }
     }
 
     public async Task CheckUpdateManuallyAsync()

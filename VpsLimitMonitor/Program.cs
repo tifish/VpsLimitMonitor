@@ -24,6 +24,9 @@ internal static class Program
         }
         finally
         {
+#if DEBUG
+            McpDebug.McpDebugServer.Stop();
+#endif
             LogManager.Shutdown();
         }
     }
