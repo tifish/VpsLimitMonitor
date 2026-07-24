@@ -17,6 +17,7 @@ public class StatusWindow : Window
         _controller = controller;
 
         Title = "VPS 流量监视器";
+        FontSize = 14;
         Width = 420;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -60,7 +61,7 @@ public class StatusWindow : Window
                 new TextBlock
                 {
                     Text = account.Config.Name,
-                    FontSize = 16,
+                    FontSize = 18,
                     FontWeight = FontWeight.Bold,
                     VerticalAlignment = VerticalAlignment.Center,
                 }
@@ -162,7 +163,7 @@ public class StatusWindow : Window
             new TextBlock
             {
                 Text = title,
-                FontSize = 16,
+                FontSize = 18,
                 FontWeight = FontWeight.Bold,
             }
         );
@@ -174,14 +175,13 @@ public class StatusWindow : Window
                 {
                     Text = $"检查失败：{stock.Error}",
                     Foreground = Brushes.OrangeRed,
-                    FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
                 }
             );
         }
         else if (stock.Plans.Count == 0)
         {
-            panel.Children.Add(new TextBlock { Text = "等待检查…", FontSize = 12, Opacity = 0.6 });
+            panel.Children.Add(new TextBlock { Text = "等待检查…", Opacity = 0.6 });
         }
         else
         {
@@ -190,7 +190,6 @@ public class StatusWindow : Window
                 var line = new TextBlock
                 {
                     Text = $"{plan.Name}：{(plan.InStock ? "有货！" : "售罄")}",
-                    FontSize = 12,
                     Opacity = plan.InStock ? 1 : 0.6,
                 };
                 if (plan.InStock)
@@ -207,7 +206,7 @@ public class StatusWindow : Window
                 new TextBlock
                 {
                     Text = $"检查于 {check:HH:mm:ss}",
-                    FontSize = 11,
+                    FontSize = 12,
                     Opacity = 0.6,
                 }
             );
@@ -248,14 +247,14 @@ public class StatusWindow : Window
             var line =
                 $"已用 {traffic.UsedGB:F1} / {traffic.TotalGB:F0} GB"
                 + $" · 剩 {traffic.RemainingGB:F1} GB（{traffic.RemainingPercent:F1}%）";
-            panel.Children.Add(new TextBlock { Text = line, FontSize = 12 });
+            panel.Children.Add(new TextBlock { Text = line });
 
             if (traffic.ResetNotice is { } reset)
                 panel.Children.Add(
                     new TextBlock
                     {
                         Text = $"下次重置：{reset}",
-                        FontSize = 11,
+                        FontSize = 12,
                         Opacity = 0.6,
                     }
                 );
@@ -267,14 +266,13 @@ public class StatusWindow : Window
                 {
                     Text = $"获取失败：{svc.Error}",
                     Foreground = Brushes.OrangeRed,
-                    FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
                 }
             );
         }
         else
         {
-            panel.Children.Add(new TextBlock { Text = "等待数据…", FontSize = 12, Opacity = 0.6 });
+            panel.Children.Add(new TextBlock { Text = "等待数据…", Opacity = 0.6 });
         }
 
         if (svc.Service.DueDate is { } due)
@@ -286,7 +284,7 @@ public class StatusWindow : Window
                 0 => $"到期：{due:yyyy-MM-dd}（今天）",
                 _ => $"到期：{due:yyyy-MM-dd}（剩 {days} 天）",
             };
-            var line = new TextBlock { Text = text, FontSize = 11, Opacity = 0.6 };
+            var line = new TextBlock { Text = text, FontSize = 12, Opacity = 0.6 };
             if (days <= AlertManager.RenewalReminderDays)
             {
                 line.Foreground = Brushes.OrangeRed;

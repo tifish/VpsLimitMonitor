@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Media;
 using JeekTools;
 
 namespace VpsLimitMonitor;
@@ -33,6 +34,10 @@ internal static class Program
 
     public static AppBuilder BuildAvaloniaApp()
     {
-        return AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+        return AppBuilder
+            .Configure<App>()
+            .UsePlatformDetect()
+            .With(new FontManagerOptions { DefaultFamilyName = "Microsoft YaHei UI" })
+            .LogToTrace();
     }
 }
