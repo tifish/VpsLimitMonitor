@@ -110,6 +110,9 @@ public class StatusWindow : Window
                 root.Children.Add(BuildServiceRow(svc));
         }
 
+        if (Settings.SettingsManager.Settings.StockMonitorEnabled)
+            root.Children.Add(BuildStockSection());
+
         var footer = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -145,6 +148,71 @@ public class StatusWindow : Window
 
         root.Children.Add(footer);
         Content = new ScrollViewer { Content = root, MaxHeight = 640 };
+    }
+
+    private Control BuildStockSection()
+    {
+        var panel = new StackPanel { Spacing = 3 };
+        var stock = _controller.Stock;
+
+        var title = "库存监控";
+        if (stock.Simulated)
+            title += "（模拟数据）";
+        panel.Children.Add(
+            new TextBlock
+            {
+                Text = title,
+                FontSize = 16,
+                FontWeight = FontWeight.Bold,
+            }
+        );
+
+        if (stock.Error != null)
+        {
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Text = $"检查失败：{stock.Error}",
+                    Foreground = Brushes.OrangeRed,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                }
+            );
+        }
+        else if (stock.Plans.Count == 0)
+        {
+            panel.Children.Add(new TextBlock { Text = "等待检查…", FontSize = 12, Opacity = 0.6 });
+        }
+        else
+        {
+            foreach (var plan in stock.Plans)
+            {
+                var line = new TextBlock
+                {
+                    Text = $"{plan.Name}：{(plan.InStock ? "有货！" : "售罄")}",
+                    FontSize = 12,
+                    Opacity = plan.InStock ? 1 : 0.6,
+                };
+                if (plan.InStock)
+                {
+                    line.Foreground = Brushes.Green;
+                    line.FontWeight = FontWeight.Bold;
+                }
+                panel.Children.Add(line);
+            }
+        }
+
+        if (stock.LastCheck is { } check)
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Text = $"检查于 {check:HH:mm:ss}",
+                    FontSize = 11,
+                    Opacity = 0.6,
+                }
+            );
+
+        return panel;
     }
 
     private Control BuildServiceRow(ServiceState svc)

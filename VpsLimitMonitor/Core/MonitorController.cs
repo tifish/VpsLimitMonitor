@@ -22,6 +22,7 @@ public class MonitorController
 
     public List<AccountState> Accounts { get; } = [];
     public AlertManager Alerts { get; } = new();
+    public StockMonitor Stock { get; private set; } = null!;
     public TrayIconManager Tray { get; private set; } = null!;
     public DateTime? LastRefresh { get; private set; }
     public bool Refreshing { get; private set; }
@@ -35,6 +36,7 @@ public class MonitorController
         SettingsManager.SettingsReloaded += OnSettingsReloaded;
         ApplyTheme();
         BuildAccounts();
+        Stock = new StockMonitor(this);
 
         Tray = new TrayIconManager(this);
         Tray.Update();
@@ -45,6 +47,7 @@ public class MonitorController
 
         UpdateManager.Start(this);
         _ = PollLoopAsync();
+        Stock.Start();
         await Task.CompletedTask;
     }
 
@@ -258,6 +261,8 @@ public class MonitorController
     {
         ApplyTheme();
         TriggerRefresh();
+        Stock.TriggerCheck();
+        Tray.UpdateStockChecks();
         Log.ZLogInformation($"Settings change applied");
     }
 
@@ -281,6 +286,16 @@ public class MonitorController
         SettingsManager.Save();
         ApplyTheme();
         Tray.UpdateThemeChecks();
+    }
+
+    public void SetStockMonitorEnabled(bool enabled)
+    {
+        SettingsManager.Settings.StockMonitorEnabled = enabled;
+        SettingsManager.Save();
+        Tray.UpdateStockChecks();
+        if (enabled)
+            Stock.TriggerCheck();
+        RebuildStatusWindow();
     }
 
     public void SetUpdateCheckInterval(string interval)

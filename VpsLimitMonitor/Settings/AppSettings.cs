@@ -14,4 +14,7 @@ public class AppSettings
     public double AlertRemainingPercent { get; set; } = 10;
     public string Theme { get; set; } = "System"; // System | Light | Dark
     public string UpdateCheckInterval { get; set; } = "Daily"; // Every6Hours | Daily | Weekly | None
+    public bool StockMonitorEnabled { get; set; } = true;
+    public string StockMonitorUrl { get; set; } = "https://novixlink.com/store/us-lacup-isp";
+    public int StockMonitorIntervalMinutes { get; set; } = 10;
 }

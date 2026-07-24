@@ -29,6 +29,8 @@ App tools:
 - `show_login_window` — open the WebView2 login window for an account.
 - `set_settings` — change `pollIntervalMinutes` / `alertRemainingPercent`.
 - `get_alerts` — recent toast alert records (verifies alerts fired without watching the screen).
+- `check_stock` — force a stock check of the store page now and return plan availability.
+- `simulate_stock` — mark a plan (`plan` substring, default first) as in stock to trigger the restock alert; persists until `clear_simulation`.
 - `get_cookies` — list the account session's cookies for its site (name/domain/session-or-persistent/expiry), for verifying login-cookie persistence.
 - `check_update` — check auto-update; `baseUrl` overrides the download base (point it at a local server to simulate a release), `apply: true` actually downloads, exits, and restarts the app.
 - `get_update_status` — local version, update settings, and last check result.

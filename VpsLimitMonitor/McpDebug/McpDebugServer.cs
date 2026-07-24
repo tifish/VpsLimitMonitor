@@ -117,6 +117,16 @@ public static class McpDebugServer
             Schema(("account", "string", "账号名，省略为第一个账号"))
         ),
         new(
+            "check_stock",
+            "立即执行一次库存检查并返回库存状态（不受开关限制）",
+            EmptySchema()
+        ),
+        new(
+            "simulate_stock",
+            "注入模拟库存（触发放货提醒），plan 省略时标记第一个套餐有货；无真实数据时先自动检查一次。持续到 clear_simulation",
+            Schema(("plan", "string", "套餐名（子串匹配），省略为第一个套餐"))
+        ),
+        new(
             "fetch_url",
             "用账号会话 fetch 一个同站 URL，返回状态、最终 URL 和响应体（调试用）",
             Schema(
@@ -372,7 +382,9 @@ public static class McpDebugServer
                     foreach (var svc in acc.Services)
                         svc.Simulated = false;
                 }
+                _controller.Stock.Simulated = false;
                 _controller.TriggerRefresh();
+                _controller.Stock.TriggerCheck();
                 return "Simulation cleared, refresh triggered";
 
             case "simulate_session_expired":
@@ -464,6 +476,35 @@ public static class McpDebugServer
                 return $"Status: {res.Status}\nUrl: {res.Url}\n\n{body}";
             }
 
+            case "check_stock":
+                await _controller.Stock.CheckAsync();
+                return BuildStockJson();
+
+            case "simulate_stock":
+            {
+                var stock = _controller.Stock;
+                if (stock.Plans.Count == 0)
+                    await stock.CheckAsync();
+                if (stock.Plans.Count == 0)
+                    stock.Plans.Add(new StockPlan("模拟套餐", false));
+
+                var planName = args?["plan"]?.GetValue<string>();
+                var plan =
+                    (planName != null
+                        ? stock.Plans.FirstOrDefault(p =>
+                            p.Name.Contains(planName, StringComparison.OrdinalIgnoreCase)
+                        )
+                        : stock.Plans.FirstOrDefault())
+                    ?? throw new InvalidOperationException($"Plan not found: {planName}");
+
+                stock.Simulated = true;
+                plan.InStock = true;
+                plan.Alerted = false;
+                stock.EvaluateAlerts();
+                _controller.RebuildStatusWindow();
+                return BuildStockJson();
+            }
+
             case "get_alerts":
                 return _controller.Alerts.RecentAlerts.Count == 0
                     ? "(no alerts)"
@@ -515,6 +556,30 @@ public static class McpDebugServer
             ) ?? throw new InvalidOperationException($"Account not found: {name}");
     }
 
+    private static string BuildStockJson()
+    {
+        var stock = _controller.Stock;
+        return JsonSerializer.Serialize(
+            new
+            {
+                enabled = SettingsManager.Settings.StockMonitorEnabled,
+                url = SettingsManager.Settings.StockMonitorUrl,
+                intervalMinutes = SettingsManager.Settings.StockMonitorIntervalMinutes,
+                lastCheck = stock.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
+                error = stock.Error,
+                simulated = stock.Simulated,
+                anyInStock = stock.AnyInStock,
+                plans = stock.Plans.Select(p => new
+                {
+                    name = p.Name,
+                    inStock = p.InStock,
+                    alerted = p.Alerted,
+                }),
+            },
+            PrettyJson
+        );
+    }
+
     private static string BuildStatusJson()
     {
         var payload = new
@@ -549,6 +614,18 @@ public static class McpDebugServer
                     simulated = s.Simulated,
                 }),
             }),
+            stock = new
+            {
+                enabled = SettingsManager.Settings.StockMonitorEnabled,
+                lastCheck = _controller.Stock.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
+                error = _controller.Stock.Error,
+                simulated = _controller.Stock.Simulated,
+                plans = _controller.Stock.Plans.Select(p => new
+                {
+                    name = p.Name,
+                    inStock = p.InStock,
+                }),
+            },
             recentAlerts = _controller.Alerts.RecentAlerts.TakeLast(10),
         };
 

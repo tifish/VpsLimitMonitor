@@ -25,6 +25,7 @@ public class TrayIconManager
     private readonly NativeMenuItem _storageDefaultItem;
     private readonly NativeMenuItem _storagePortableItem;
     private readonly NativeMenuItem _storageCustomItem;
+    private readonly NativeMenuItem _stockMonitorItem;
 
     public TrayIconManager(MonitorController controller)
     {
@@ -72,6 +73,15 @@ public class TrayIconManager
         var refreshItem = new NativeMenuItem("立即刷新");
         refreshItem.Click += (_, _) => _controller.TriggerRefresh();
 
+        _stockMonitorItem = new NativeMenuItem("监控库存放货")
+        {
+            ToggleType = MenuItemToggleType.CheckBox,
+        };
+        _stockMonitorItem.Click += (_, _) =>
+            _controller.SetStockMonitorEnabled(
+                !SettingsManager.Settings.StockMonitorEnabled
+            );
+
         var statusItem = new NativeMenuItem("状态面板");
         statusItem.Click += (_, _) => _controller.ToggleStatusWindow();
 
@@ -87,6 +97,7 @@ public class TrayIconManager
         var menu = new NativeMenu();
         menu.Items.Add(statusItem);
         menu.Items.Add(refreshItem);
+        menu.Items.Add(_stockMonitorItem);
         menu.Items.Add(new NativeMenuItemSeparator());
 
         foreach (var account in _controller.Accounts)
@@ -116,6 +127,12 @@ public class TrayIconManager
         UpdateThemeChecks();
         UpdateUpdateIntervalChecks();
         UpdateStorageChecks();
+        UpdateStockChecks();
+    }
+
+    public void UpdateStockChecks()
+    {
+        _stockMonitorItem.IsChecked = SettingsManager.Settings.StockMonitorEnabled;
     }
 
     private NativeMenuItem CreateStorageItem(string header, StorageLocation location)
