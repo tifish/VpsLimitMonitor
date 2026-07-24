@@ -69,6 +69,7 @@ public class WebSession(string baseUrl, string profileName)
         _window = new Window
         {
             Title = $"登录 - {profileName}",
+            Icon = App.AppIcon,
             Width = 1000,
             Height = 760,
             ShowInTaskbar = true,

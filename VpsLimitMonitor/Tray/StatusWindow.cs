@@ -18,6 +18,7 @@ public class StatusWindow : Window
         _controller = controller;
 
         Title = "VPS 流量监视器";
+        Icon = App.AppIcon;
         FontSize = 14;
         SizeToContent = SizeToContent.WidthAndHeight;
         CanResize = false;
