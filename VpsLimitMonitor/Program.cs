@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+#if !DEBUG
+        // Debug 版不限制单实例，方便多个 worktree 并行开发调试
         using var singleInstance = new SingleInstance("VpsLimitMonitor");
         if (singleInstance.IsRunning)
         {
@@ -17,6 +19,7 @@ internal static class Program
         }
 
         singleInstance.StartIPCServer(_ => App.Controller?.ShowStatusWindowFromIpc());
+#endif
 
         LogManager.EnableLogging();
         try
