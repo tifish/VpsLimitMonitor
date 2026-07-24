@@ -25,6 +25,9 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
     [GeneratedRegex(@"^([\d.]+)\s*(MB|GB|TB)?", RegexOptions.IgnoreCase)]
     private static partial Regex SizeRegex();
 
+    [GeneratedRegex(@"\b(\d{4}-\d{2}-\d{2})\b")]
+    private static partial Regex IsoDateRegex();
+
     public async Task<bool> IsLoggedInAsync()
     {
         var rows = await FetchServiceRowsAsync();
@@ -48,7 +51,14 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
             if (labelIndex > 0)
                 name = text[..labelIndex].Trim().TrimEnd('-').Trim();
 
-            services.Add(new VpsService(id, name, label, ip));
+            // 行文本里日期格式随 WHMCS 设置变化，只认无歧义的 ISO 格式（即下次到期日列）
+            DateOnly? dueDate =
+                IsoDateRegex().Match(text) is { Success: true } dm
+                && DateOnly.TryParseExact(dm.Groups[1].Value, "yyyy-MM-dd", out var parsed)
+                    ? parsed
+                    : null;
+
+            services.Add(new VpsService(id, name, label, ip, dueDate));
         }
 
         // Lagom 主题的服务表格由 JS 动态填充，原始 HTML 里没有行数据，改走它的 JSON API
@@ -89,7 +99,12 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
             var ip = row.TryGetProperty("dedicatedip", out var dedicatedIp)
                 ? dedicatedIp.GetString()
                 : null;
-            services.Add(new VpsService(id, name, label, ip));
+            DateOnly? dueDate =
+                row.TryGetProperty("normalisednextduedate", out var due)
+                && DateOnly.TryParseExact(due.GetString(), "yyyy-MM-dd", out var parsed)
+                    ? parsed
+                    : null;
+            services.Add(new VpsService(id, name, label, ip, dueDate));
         }
 
         return services;

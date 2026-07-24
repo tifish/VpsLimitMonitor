@@ -57,6 +57,16 @@ public static class McpDebugServer
             )
         ),
         new(
+            "simulate_due_date",
+            "注入模拟到期时间（触发续费提醒逻辑），serviceId 省略时作用于第一个服务。持续到 clear_simulation",
+            Schema(
+                ("account", "string", "账号名，省略为第一个账号"),
+                ("serviceId", "string", "服务 ID，省略为该账号第一个服务"),
+                ("daysFromNow", "number", "距今天数（可为负表示已过期），与 date 二选一"),
+                ("date", "string", "到期日期 yyyy-MM-dd，与 daysFromNow 二选一")
+            )
+        ),
+        new(
             "clear_simulation",
             "清除所有模拟数据并触发真实刷新",
             EmptySchema()
@@ -375,6 +385,38 @@ public static class McpDebugServer
                 return BuildStatusJson();
             }
 
+            case "simulate_due_date":
+            {
+                var account = FindAccount(args?["account"]?.GetValue<string>());
+                var serviceId = args?["serviceId"]?.GetValue<string>();
+                var svc =
+                    (serviceId != null
+                        ? account.Services.FirstOrDefault(s => s.Service.Id == serviceId)
+                        : account.Services.FirstOrDefault())
+                    ?? throw new InvalidOperationException("Service not found (先刷新一次以发现服务)");
+
+                DateOnly due;
+                if (args?["daysFromNow"]?.GetValue<double>() is { } days)
+                    due = DateOnly.FromDateTime(DateTime.Now).AddDays((int)days);
+                else if (
+                    args?["date"]?.GetValue<string>() is { } text
+                    && DateOnly.TryParseExact(text, "yyyy-MM-dd", out var parsed)
+                )
+                    due = parsed;
+                else
+                    throw new InvalidOperationException(
+                        "daysFromNow or date (yyyy-MM-dd) is required"
+                    );
+
+                svc.Service = svc.Service with { DueDate = due };
+                svc.Simulated = true;
+                svc.RenewalRemindedOn = null;
+                _controller.Alerts.Evaluate(account);
+                _controller.Tray.Update();
+                _controller.RebuildStatusWindow();
+                return BuildStatusJson();
+            }
+
             case "clear_simulation":
                 foreach (var acc in _controller.Accounts)
                 {
@@ -602,6 +644,8 @@ public static class McpDebugServer
                     label = s.Service.Label,
                     name = s.Service.Name,
                     ip = s.Service.Ip,
+                    dueDate = s.Service.DueDate?.ToString("yyyy-MM-dd"),
+                    renewalRemindedOn = s.RenewalRemindedOn?.ToString("yyyy-MM-dd"),
                     usedGB = s.Traffic?.UsedGB,
                     totalGB = s.Traffic?.TotalGB,
                     remainingGB = s.Traffic?.RemainingGB,

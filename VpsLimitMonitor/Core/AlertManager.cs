@@ -11,6 +11,9 @@ public class AlertManager
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(AlertManager));
 
+    /// <summary>到期前多少天开始每天提醒续费。</summary>
+    public const int RenewalReminderDays = 7;
+
     /// <summary>最近报警记录（供状态面板与 MCP 调试接口查询）。</summary>
     public List<string> RecentAlerts { get; } = [];
 
@@ -20,6 +23,8 @@ public class AlertManager
 
         foreach (var svc in account.Services)
         {
+            EvaluateRenewal(account, svc);
+
             if (svc.Traffic is not { } traffic)
                 continue;
 
@@ -39,6 +44,26 @@ public class AlertManager
                 svc.Alerted = false;
             }
         }
+    }
+
+    private void EvaluateRenewal(AccountState account, ServiceState svc)
+    {
+        if (svc.Service.DueDate is not { } due)
+            return;
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var days = due.DayNumber - today.DayNumber;
+        if (days > RenewalReminderDays || svc.RenewalRemindedOn == today)
+            return;
+
+        svc.RenewalRemindedOn = today;
+        var when = days switch
+        {
+            < 0 => $"已于 {due:yyyy-MM-dd} 到期",
+            0 => $"今天（{due:yyyy-MM-dd}）到期",
+            _ => $"将于 {due:yyyy-MM-dd} 到期（还剩 {days} 天）",
+        };
+        ShowToast("VPS 续费提醒", $"{account.Config.Name} {svc.Service.Label} {when}，请及时续费");
     }
 
     public void NotifyLoginNeeded(AccountState account)

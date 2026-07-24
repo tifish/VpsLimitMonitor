@@ -277,6 +277,25 @@ public class StatusWindow : Window
             panel.Children.Add(new TextBlock { Text = "等待数据…", FontSize = 12, Opacity = 0.6 });
         }
 
+        if (svc.Service.DueDate is { } due)
+        {
+            var days = due.DayNumber - DateOnly.FromDateTime(DateTime.Now).DayNumber;
+            var text = days switch
+            {
+                < 0 => $"到期：{due:yyyy-MM-dd}（已过期 {-days} 天）",
+                0 => $"到期：{due:yyyy-MM-dd}（今天）",
+                _ => $"到期：{due:yyyy-MM-dd}（剩 {days} 天）",
+            };
+            var line = new TextBlock { Text = text, FontSize = 11, Opacity = 0.6 };
+            if (days <= AlertManager.RenewalReminderDays)
+            {
+                line.Foreground = Brushes.OrangeRed;
+                line.Opacity = 1;
+                line.FontWeight = FontWeight.SemiBold;
+            }
+            panel.Children.Add(line);
+        }
+
         return panel;
     }
 }

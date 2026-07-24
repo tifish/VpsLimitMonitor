@@ -1,6 +1,6 @@
 namespace VpsLimitMonitor.Providers;
 
-public record VpsService(string Id, string Name, string Label, string? Ip);
+public record VpsService(string Id, string Name, string Label, string? Ip, DateOnly? DueDate);
 
 public record TrafficInfo(double UsedGB, double TotalGB, string? ResetNotice, bool IsOnline)
 {

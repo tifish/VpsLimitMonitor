@@ -120,14 +120,28 @@ public class MonitorController
 
             await account.Session.EnsureInitializedAsync();
 
-            if (account.Services.Count == 0)
+            // 每轮都重新拉服务列表：续费后到期时间、新增/删除的服务都要跟上
+            var services = await account.Provider.ListServicesAsync();
+            foreach (var service in services)
             {
-                var services = await account.Provider.ListServicesAsync();
-                account.Services.AddRange(services.Select(s => new ServiceState(s)));
-                Log.ZLogInformation(
-                    $"{account.Config.Name}: discovered {services.Count} services"
+                var existing = account.Services.FirstOrDefault(s =>
+                    s.Service.Id == service.Id
                 );
+                if (existing == null)
+                {
+                    account.Services.Add(new ServiceState(service));
+                    Log.ZLogInformation(
+                        $"{account.Config.Name}: discovered service {service.Label}"
+                    );
+                }
+                else if (!existing.Simulated)
+                {
+                    existing.Service = service;
+                }
             }
+            account.Services.RemoveAll(s =>
+                !s.Simulated && services.All(x => x.Id != s.Service.Id)
+            );
 
             foreach (var svc in account.Services)
             {

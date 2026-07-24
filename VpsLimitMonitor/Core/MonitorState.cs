@@ -12,6 +12,9 @@ public class ServiceState(VpsService service)
     public string? Error { get; set; }
     public bool Alerted { get; set; }
 
+    /// <summary>最近一次续费提醒的日期，保证临期后每天只提醒一次。</summary>
+    public DateOnly? RenewalRemindedOn { get; set; }
+
     /// <summary>true 表示当前数据是 MCP 调试接口注入的模拟值，下次轮询前不被覆盖。</summary>
     public bool Simulated { get; set; }
 }
