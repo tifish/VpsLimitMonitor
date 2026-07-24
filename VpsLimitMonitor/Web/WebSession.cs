@@ -12,11 +12,12 @@ namespace VpsLimitMonitor.Web;
 public record FetchResult(int Status, string Url, string Body);
 
 /// <summary>
-///     基于 WebView2 的站点会话。每个账号一个独立 Profile（cookie 隔离），
+///     基于 WebView2 的站点会话。所有账号共用默认 Profile（数据目录固定在
+///     %LocalAppData%，安装版与开发版共享登录态；不同站点靠域名天然隔离 cookie），
 ///     平时窗口隐藏，在已登录页面上下文里用 fetch 抓数据；需要登录时把窗口显示出来。
 ///     所有方法必须在 UI 线程调用。
 /// </summary>
-public class WebSession(string baseUrl, string profileName)
+public class WebSession(string baseUrl, string accountName)
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(WebSession));
 
@@ -68,7 +69,7 @@ public class WebSession(string baseUrl, string profileName)
 
         _window = new Window
         {
-            Title = $"登录 - {profileName}",
+            Title = $"登录 - {accountName}",
             Icon = App.AppIcon,
             Width = 1000,
             Height = 760,
@@ -88,11 +89,7 @@ public class WebSession(string baseUrl, string profileName)
             _window.TryGetPlatformHandle()?.Handle
             ?? throw new InvalidOperationException("Failed to get window handle");
 
-        var options = _environment.CreateCoreWebView2ControllerOptions();
-        options.ProfileName = SanitizeProfileName(profileName);
-        options.IsInPrivateModeEnabled = false;
-
-        _controller = await _environment.CreateCoreWebView2ControllerAsync(handle, options);
+        _controller = await _environment.CreateCoreWebView2ControllerAsync(handle);
         _controller.IsVisible = false;
         _webView = _controller.CoreWebView2;
         _webView.WebMessageReceived += OnWebMessageReceived;
@@ -102,13 +99,7 @@ public class WebSession(string baseUrl, string profileName)
                 LoginWindowNavigated?.Invoke();
         };
 
-        Log.ZLogInformation($"WebView2 session initialized for {profileName} ({BaseUrl})");
-    }
-
-    private static string SanitizeProfileName(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        return new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+        Log.ZLogInformation($"WebView2 session initialized for {accountName} ({BaseUrl})");
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
