@@ -67,6 +67,14 @@ public static class McpDebugServer
             )
         ),
         new(
+            "simulate_services",
+            "注入 N 台模拟服务器（测试面板多列布局），持续到 clear_simulation",
+            Schema(
+                ("account", "string", "账号名，省略为第一个账号"),
+                ("count", "number", "注入数量（必填）")
+            )
+        ),
+        new(
             "clear_simulation",
             "清除所有模拟数据并触发真实刷新",
             EmptySchema()
@@ -412,6 +420,40 @@ public static class McpDebugServer
                 svc.Simulated = true;
                 svc.RenewalRemindedOn = null;
                 _controller.Alerts.Evaluate(account);
+                _controller.Tray.Update();
+                _controller.RebuildStatusWindow();
+                return BuildStatusJson();
+            }
+
+            case "simulate_services":
+            {
+                var account = FindAccount(args?["account"]?.GetValue<string>());
+                var count = (int)(
+                    args?["count"]?.GetValue<double>()
+                    ?? throw new InvalidOperationException("count is required")
+                );
+
+                var rnd = new Random(42);
+                for (var i = 0; i < count; i++)
+                {
+                    var used = Math.Round(rnd.NextDouble() * 500, 1);
+                    account.Services.Add(
+                        new ServiceState(
+                            new VpsService(
+                                $"sim-{i}",
+                                "模拟套餐",
+                                $"SIM-{i:D2}",
+                                $"10.0.0.{i + 1}",
+                                DateOnly.FromDateTime(DateTime.Now).AddDays(3 + i)
+                            )
+                        )
+                        {
+                            Traffic = new TrafficInfo(used, 500, "2026-08-01 00:00", true),
+                            LastUpdate = DateTime.Now,
+                            Simulated = true,
+                        }
+                    );
+                }
                 _controller.Tray.Update();
                 _controller.RebuildStatusWindow();
                 return BuildStatusJson();

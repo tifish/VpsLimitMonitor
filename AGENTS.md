@@ -25,6 +25,7 @@ App tools:
 - `refresh` — force a full poll now and return the latest status.
 - `simulate_traffic` — inject fake traffic (`usedGB`, optional `totalGB`, `account`, `serviceId`) to trigger alert logic; the injected value survives until `clear_simulation`.
 - `simulate_due_date` — inject a fake expiry date (`daysFromNow` or `date`, optional `account`, `serviceId`) to trigger the renewal-reminder logic; persists until `clear_simulation`.
+- `simulate_services` — inject `count` fake servers (optional `account`) to test the status panel's multi-column layout; persists until `clear_simulation`.
 - `clear_simulation` — drop injected data and re-poll real data.
 - `simulate_session_expired` — mark an account as logged-out to test the login-needed flow; refreshes keep treating it as expired until `clear_simulation`.
 - `show_login_window` — open the WebView2 login window for an account.

@@ -28,6 +28,37 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
     [GeneratedRegex(@"\b(\d{4}-\d{2}-\d{2})\b")]
     private static partial Regex IsoDateRegex();
 
+    [GeneratedRegex(@"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)\s*美东时间")]
+    private static partial Regex EasternTimeRegex();
+
+    /// <summary>站点返回的重置时间是美东时间，转成本地时区；解析不了就原样保留。</summary>
+    private static string? ToLocalResetNotice(string? notice)
+    {
+        if (notice == null)
+            return null;
+
+        var match = EasternTimeRegex().Match(notice);
+        if (!match.Success)
+            return notice;
+
+        try
+        {
+            var text = match.Groups[1].Value;
+            var eastern = DateTime.ParseExact(
+                text,
+                text.Length > 16 ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm",
+                CultureInfo.InvariantCulture
+            );
+            var zone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+            var local = TimeZoneInfo.ConvertTime(eastern, zone, TimeZoneInfo.Local);
+            return $"{local:yyyy-MM-dd HH:mm}";
+        }
+        catch (Exception)
+        {
+            return notice;
+        }
+    }
+
     public async Task<bool> IsLoggedInAsync()
     {
         var rows = await FetchServiceRowsAsync();
@@ -160,7 +191,7 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
         var usedGB = ParseSizeGB(GetStringOrNumber(root, "trafficUsed"));
         var totalGB = ParseSizeGB(GetStringOrNumber(root, "trafficTotal"));
         var resetNotice = root.TryGetProperty("trafficResetNotice", out var notice)
-            ? notice.GetString()
+            ? ToLocalResetNotice(notice.GetString())
             : null;
         var isOnline =
             root.TryGetProperty("status", out var status) && status.GetString() == "on";

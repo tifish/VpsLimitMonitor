@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using VpsLimitMonitor.Core;
@@ -18,14 +19,19 @@ public class StatusWindow : Window
 
         Title = "VPS 流量监视器";
         FontSize = 14;
-        Width = 420;
-        SizeToContent = SizeToContent.Height;
+        SizeToContent = SizeToContent.WidthAndHeight;
         CanResize = false;
         ShowInTaskbar = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
         Deactivated += (_, _) => Hide();
+        // 数据刷新会改变面板高度，重新贴底定位，避免底部伸到任务栏下面
+        SizeChanged += (_, _) =>
+        {
+            if (IsVisible)
+                PositionNearTray();
+        };
         Closing += (_, e) =>
         {
             e.Cancel = true;
@@ -37,8 +43,12 @@ public class StatusWindow : Window
     {
         Show();
         Activate();
+        PositionNearTray();
+    }
 
-        // 定位到主屏工作区右下角（托盘附近）
+    /// <summary>定位到主屏工作区右下角（托盘附近）。</summary>
+    private void PositionNearTray()
+    {
         var screen = Screens.Primary;
         if (screen == null)
             return;
@@ -50,9 +60,51 @@ public class StatusWindow : Window
         Position = new PixelPoint(wa.Right - width - 12, wa.Bottom - height - 12);
     }
 
+    /// <summary>每台服务器卡片占用的固定宽度，多列排布的列宽。</summary>
+    private const double ServiceCardWidth = 400;
+
     public void Rebuild()
     {
+        // 尺寸上限跟随屏幕工作区，避免内容被截断出现滚动条
+        var maxHeight = double.PositiveInfinity;
+        if (Screens.Primary is { } s)
+        {
+            maxHeight = (s.WorkingArea.Height - 24) / s.Scaling;
+            MaxHeight = maxHeight;
+            MaxWidth = (s.WorkingArea.Width - 24) / s.Scaling;
+        }
+
         var root = new StackPanel { Margin = new Thickness(16), Spacing = 10 };
+
+        // 顶栏：刷新按钮、刷新时间与版本号
+        var topBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var refreshButton = new Button { Content = "立即刷新" };
+        refreshButton.Click += (_, _) => _controller.TriggerRefresh();
+        topBar.Children.Add(refreshButton);
+        if (_controller.LastRefresh is { } last)
+        {
+            topBar.Children.Add(
+                new TextBlock
+                {
+                    Text = _controller.Refreshing ? "刷新中…" : $"更新于 {last:HH:mm:ss}",
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Opacity = 0.6,
+                }
+            );
+        }
+        topBar.Children.Add(
+            new TextBlock
+            {
+                Text = UpdateManager.LocalVersionText,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.4,
+            }
+        );
+        root.Children.Add(topBar);
+
+        var stockEnabled = Settings.SettingsManager.Settings.StockMonitorEnabled;
+        // 服务器区实际宽度（列数决定），库存行以此为宽度上限折行，避免反过来撑宽窗口
+        var contentWidth = ServiceCardWidth;
 
         foreach (var account in _controller.Accounts)
         {
@@ -107,66 +159,70 @@ public class StatusWindow : Window
                 root.Children.Add(new TextBlock { Text = "正在获取服务列表…" });
             }
 
-            foreach (var svc in account.Services)
-                root.Children.Add(BuildServiceRow(svc));
-        }
+            if (account.Services.Count == 0)
+                continue;
 
-        if (Settings.SettingsManager.Settings.StockMonitorEnabled)
-            root.Children.Add(BuildStockSection());
-
-        var footer = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right,
-        };
-
-        footer.Children.Add(
-            new TextBlock
+            // 多列排布：量出上方内容高度（给库存行预留一行），剩余空间即每列高度，放不下时向右换列
+            root.Measure(Size.Infinity);
+            var stockReserve = stockEnabled ? 60 : 0;
+            var wrap = new WrapPanel
             {
-                Text = UpdateManager.LocalVersionText,
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = 0.4,
+                Orientation = Orientation.Vertical,
+                ItemWidth = ServiceCardWidth,
+                MaxHeight = Math.Max(
+                    160,
+                    maxHeight - root.DesiredSize.Height - stockReserve - 16
+                ),
+            };
+            foreach (var svc in account.Services)
+            {
+                var card = BuildServiceRow(svc);
+                card.Margin = new Thickness(0, 0, 16, 6);
+                wrap.Children.Add(card);
             }
-        );
+            root.Children.Add(wrap);
 
-        var refreshButton = new Button { Content = "立即刷新" };
-        refreshButton.Click += (_, _) => _controller.TriggerRefresh();
-        footer.Children.Add(refreshButton);
-
-        if (_controller.LastRefresh is { } last)
-        {
-            footer.Children.Insert(
-                1,
-                new TextBlock
-                {
-                    Text = _controller.Refreshing ? "刷新中…" : $"更新于 {last:HH:mm:ss}",
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Opacity = 0.6,
-                }
-            );
+            wrap.Measure(Size.Infinity);
+            contentWidth = Math.Max(contentWidth, wrap.DesiredSize.Width);
         }
 
-        root.Children.Add(footer);
-        Content = new ScrollViewer { Content = root, MaxHeight = 640 };
+        if (stockEnabled)
+        {
+            var stockSection = BuildStockSection();
+            stockSection.MaxWidth = contentWidth;
+            stockSection.HorizontalAlignment = HorizontalAlignment.Left;
+            root.Children.Insert(1, stockSection);
+        }
+
+        Content = new ScrollViewer
+        {
+            Content = root,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
     }
 
+    /// <summary>库存区：标题行带检查时间，套餐按固定格宽（半张卡片）对齐排布，窄窗口两列、宽窗口一行。</summary>
     private Control BuildStockSection()
     {
-        var panel = new StackPanel { Spacing = 3 };
         var stock = _controller.Stock;
+        var panel = new StackPanel { Spacing = 3 };
 
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         var title = "库存监控";
         if (stock.Simulated)
             title += "（模拟数据）";
-        panel.Children.Add(
-            new TextBlock
-            {
-                Text = title,
-                FontSize = 18,
-                FontWeight = FontWeight.Bold,
-            }
-        );
+        header.Children.Add(new TextBlock { Text = title, FontWeight = FontWeight.Bold });
+        if (stock.LastCheck is { } check)
+            header.Children.Add(
+                new TextBlock
+                {
+                    Text = $"检查于 {check:HH:mm:ss}",
+                    FontSize = 12,
+                    Opacity = 0.6,
+                    VerticalAlignment = VerticalAlignment.Center,
+                }
+            );
+        panel.Children.Add(header);
 
         if (stock.Error != null)
         {
@@ -185,31 +241,23 @@ public class StatusWindow : Window
         }
         else
         {
+            var wrap = new WrapPanel { ItemWidth = ServiceCardWidth / 2 };
             foreach (var plan in stock.Plans)
             {
-                var line = new TextBlock
+                var item = new TextBlock
                 {
-                    Text = $"{plan.Name}：{(plan.InStock ? "有货！" : "售罄")}",
+                    Text = $"{plan.Name} {(plan.InStock ? "有货！" : "售罄")}",
                     Opacity = plan.InStock ? 1 : 0.6,
                 };
                 if (plan.InStock)
                 {
-                    line.Foreground = Brushes.Green;
-                    line.FontWeight = FontWeight.Bold;
+                    item.Foreground = Brushes.Green;
+                    item.FontWeight = FontWeight.Bold;
                 }
-                panel.Children.Add(line);
+                wrap.Children.Add(item);
             }
+            panel.Children.Add(wrap);
         }
-
-        if (stock.LastCheck is { } check)
-            panel.Children.Add(
-                new TextBlock
-                {
-                    Text = $"检查于 {check:HH:mm:ss}",
-                    FontSize = 12,
-                    Opacity = 0.6,
-                }
-            );
 
         return panel;
     }
