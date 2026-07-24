@@ -102,9 +102,9 @@ public class TrayIconManager
 
         foreach (var account in _controller.Accounts)
         {
-            var loginItem = new NativeMenuItem($"登录 {account.Config.Name}");
-            loginItem.Click += (_, _) => _ = _controller.ShowLoginAsync(account);
-            menu.Items.Add(loginItem);
+            var openSiteItem = new NativeMenuItem($"打开 {account.Config.Name} 网站");
+            openSiteItem.Click += (_, _) => _ = _controller.OpenSiteAsync(account);
+            menu.Items.Add(openSiteItem);
         }
 
         menu.Items.Add(new NativeMenuItemSeparator());

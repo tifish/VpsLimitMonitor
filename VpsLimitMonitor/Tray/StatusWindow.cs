@@ -127,7 +127,7 @@ public class StatusWindow : Window
                     Content = "重新登录",
                     HorizontalAlignment = HorizontalAlignment.Right,
                 };
-                loginButton.Click += (_, _) => _ = _controller.ShowLoginAsync(account);
+                loginButton.Click += (_, _) => _ = _controller.OpenSiteAsync(account);
                 DockPanel.SetDock(loginButton, Dock.Right);
                 header.Children.Insert(0, loginButton);
             }

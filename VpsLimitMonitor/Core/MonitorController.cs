@@ -207,9 +207,16 @@ public class MonitorController
         _pollDelayCts.Cancel();
     }
 
-    public async Task ShowLoginAsync(AccountState account)
+    /// <summary>
+    ///     用内置浏览器打开账号站点。站点只允许单处登录，外部浏览器登录会踢掉
+    ///     监控会话，所以浏览和登录都走同一个 WebView2 窗口。
+    /// </summary>
+    public async Task OpenSiteAsync(AccountState account)
     {
-        await account.Session.ShowLoginWindowAsync(account.Provider.LoginUrl);
+        var title = account.LoggedIn
+            ? account.Config.Name
+            : $"登录 - {account.Config.Name}";
+        await account.Session.ShowWindowAsync(account.Provider.LoginUrl, title);
     }
 
     private async Task OnLoginWindowNavigatedAsync(AccountState account)

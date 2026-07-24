@@ -86,7 +86,7 @@ public static class McpDebugServer
         ),
         new(
             "show_login_window",
-            "弹出指定账号的登录窗口",
+            "用内置浏览器打开指定账号的网站（未登录时即登录窗口）",
             Schema(("account", "string", "账号名，省略为第一个账号"))
         ),
         new(
@@ -486,7 +486,7 @@ public static class McpDebugServer
             case "show_login_window":
             {
                 var account = FindAccount(args?["account"]?.GetValue<string>());
-                await _controller.ShowLoginAsync(account);
+                await _controller.OpenSiteAsync(account);
                 return "Login window shown";
             }
 

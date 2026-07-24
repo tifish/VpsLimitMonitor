@@ -74,7 +74,7 @@ public class AlertManager
         account.LoginNotified = true;
         ShowToast(
             "VPS 流量监视",
-            $"{account.Config.Name} 登录已失效，请在托盘菜单中重新登录"
+            $"{account.Config.Name} 登录已失效，请从托盘菜单打开网站重新登录"
         );
     }
 

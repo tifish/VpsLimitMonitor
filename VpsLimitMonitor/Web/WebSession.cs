@@ -69,7 +69,7 @@ public class WebSession(string baseUrl, string accountName)
 
         _window = new Window
         {
-            Title = $"登录 - {accountName}",
+            Title = accountName,
             Icon = App.AppIcon,
             Width = 1000,
             Height = 760,
@@ -266,10 +266,11 @@ public class WebSession(string baseUrl, string accountName)
         ];
     }
 
-    public async Task ShowLoginWindowAsync(string url)
+    public async Task ShowWindowAsync(string url, string title)
     {
         await EnsureInitializedAsync();
-        _window!.Show();
+        _window!.Title = title;
+        _window.Show();
         _window.Activate();
         _controller!.IsVisible = true;
         UpdateControllerBounds();
