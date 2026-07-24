@@ -112,6 +112,11 @@ public static class McpDebugServer
             )
         ),
         new(
+            "get_cookies",
+            "列出账号会话当前站点的 cookie（名称/域/是否会话级/过期时间，调试用）",
+            Schema(("account", "string", "账号名，省略为第一个账号"))
+        ),
+        new(
             "fetch_url",
             "用账号会话 fetch 一个同站 URL，返回状态、最终 URL 和响应体（调试用）",
             Schema(
@@ -433,6 +438,13 @@ public static class McpDebugServer
                 SettingsManager.SwitchStorageLocation(location, customDir, moveFiles);
                 _controller.Tray.UpdateStorageChecks();
                 return $"Storage switched to {SettingsManager.Location}: {SettingsManager.RoamingConfigDir}";
+            }
+
+            case "get_cookies":
+            {
+                var account = FindAccount(args?["account"]?.GetValue<string>());
+                var cookies = await account.Session.GetCookiesAsync();
+                return JsonSerializer.Serialize(cookies, PrettyJson);
             }
 
             case "fetch_url":

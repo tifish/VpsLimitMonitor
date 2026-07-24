@@ -155,6 +155,19 @@ public class MonitorController
             account.Error = null;
             account.LastPoll = DateTime.Now;
             Alerts.Evaluate(account);
+
+            // 登录 cookie 是会话级的，重启即丢；抓取成功说明会话有效，趁机转成持久 cookie
+            try
+            {
+                await account.Session.PersistSessionCookiesAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.ZLogWarning(
+                    $"{account.Config.Name}: persist session cookies failed: {ex.Message}"
+                );
+            }
+
             return true;
         }
         catch (SessionExpiredException)

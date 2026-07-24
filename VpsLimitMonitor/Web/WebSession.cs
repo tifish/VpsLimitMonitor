@@ -229,6 +229,51 @@ public class WebSession(string baseUrl, string profileName)
         );
     }
 
+    /// <summary>
+    ///     把当前站点的会话级 cookie 改写为持久 cookie（30 天，每次调用顺延）。
+    ///     WHMCS 的登录 cookie 不带过期时间，Chromium 重启即丢弃，导致每次启动都要重新登录。
+    /// </summary>
+    public async Task PersistSessionCookiesAsync()
+    {
+        if (_webView == null)
+            return;
+
+        var manager = _webView.CookieManager;
+        var cookies = await manager.GetCookiesAsync(BaseUrl);
+        foreach (var cookie in cookies.Where(c => c.IsSession))
+        {
+            cookie.Expires = DateTime.Now.AddDays(30);
+            manager.AddOrUpdateCookie(cookie);
+        }
+    }
+
+    public record CookieInfo(
+        string Name,
+        string Domain,
+        string Path,
+        bool IsSession,
+        DateTime? Expires,
+        bool IsHttpOnly
+    );
+
+    /// <summary>调试用：列出当前站点的 cookie 概要。</summary>
+    public async Task<List<CookieInfo>> GetCookiesAsync()
+    {
+        await EnsureInitializedAsync();
+        var cookies = await _webView!.CookieManager.GetCookiesAsync(BaseUrl);
+        return
+        [
+            .. cookies.Select(c => new CookieInfo(
+                c.Name,
+                c.Domain,
+                c.Path,
+                c.IsSession,
+                c.IsSession ? null : c.Expires,
+                c.IsHttpOnly
+            )),
+        ];
+    }
+
     public async Task ShowLoginWindowAsync(string url)
     {
         await EnsureInitializedAsync();
