@@ -166,8 +166,8 @@ def main() -> None:
     output_dir = Path(__file__).resolve().parent
     master = draw_icon()
 
-    preview_path = output_dir / "app-256.png"
-    icon_path = output_dir / "app.ico"
+    preview_path = output_dir / "App256.png"
+    icon_path = output_dir / "Application.ico"
 
     preview = master.resize((256, 256), Image.Resampling.LANCZOS)
     preview.save(preview_path, format="PNG", optimize=True)

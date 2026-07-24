@@ -280,6 +280,7 @@ public class MonitorController
 
     private void OnSettingsReloaded()
     {
+        BuildAccounts();
         ApplyTheme();
         TriggerRefresh();
         Stock.TriggerCheck();

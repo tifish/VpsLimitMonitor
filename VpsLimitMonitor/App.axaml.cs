@@ -15,7 +15,9 @@ public partial class App : Application
 
     /// <summary>应用图标，供各窗口标题栏/任务栏使用。</summary>
     public static WindowIcon AppIcon =>
-        _appIcon ??= new WindowIcon(AssetLoader.Open(new Uri("avares://VpsLimitMonitor/Assets/app.ico")));
+        _appIcon ??= new WindowIcon(
+            AssetLoader.Open(new Uri("avares://VpsLimitMonitor/Assets/Application.ico"))
+        );
 
     public override void Initialize()
     {

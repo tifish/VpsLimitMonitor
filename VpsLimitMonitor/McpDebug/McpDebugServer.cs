@@ -29,8 +29,25 @@ public static class McpDebugServer
     private static MonitorController _controller = null!;
     private static DebugMcpHost? _host;
 
-    private static string DiscoveryDir =>
-        Path.Combine(SettingsManager.Storage.LocalDir, "DebugMcp");
+    private static string WorkspaceRoot
+    {
+        get
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (
+                directory != null
+                && !File.Exists(Path.Combine(directory.FullName, "VpsLimitMonitor.slnx"))
+            )
+            {
+                directory = directory.Parent;
+            }
+
+            return directory?.FullName
+                ?? throw new DirectoryNotFoundException(
+                    $"Cannot find the VpsLimitMonitor workspace above '{AppContext.BaseDirectory}'."
+                );
+        }
+    }
 
     private record ToolDef(string Name, string Description, JsonObject InputSchema);
 
@@ -219,7 +236,6 @@ public static class McpDebugServer
             );
         }
 
-        CleanStaleDiscoveryFiles();
         _host.Start();
     }
 
@@ -229,7 +245,7 @@ public static class McpDebugServer
     }
 
     private static string DiscoveryFilePath =>
-        Path.Combine(DiscoveryDir, $"{Environment.ProcessId}.json");
+        Path.Combine(WorkspaceRoot, "bin", "debug-mcp.json");
 
     private static void OnUrlChanged(string url)
     {
@@ -237,20 +253,22 @@ public static class McpDebugServer
         {
             if (url == "")
             {
-                File.Delete(DiscoveryFilePath);
+                DeleteOwnedDiscoveryFile();
                 return;
             }
 
-            Directory.CreateDirectory(DiscoveryDir);
-            File.WriteAllText(
+            var executablePath =
+                Environment.ProcessPath
+                ?? throw new InvalidOperationException("The current executable path is unavailable.");
+            SharedDataFile.WriteAllTextAtomic(
                 DiscoveryFilePath,
                 JsonSerializer.Serialize(
-                    new
+                    new McpDebugDiscovery
                     {
-                        url,
-                        pid = Environment.ProcessId,
-                        baseDirectory = AppContext.BaseDirectory,
-                        startTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                        Url = url,
+                        ProcessId = Environment.ProcessId,
+                        ExecutablePath = Path.GetFullPath(executablePath),
+                        WorkspaceRoot = WorkspaceRoot,
                     },
                     new JsonSerializerOptions { WriteIndented = true }
                 )
@@ -262,31 +280,22 @@ public static class McpDebugServer
         }
     }
 
-    private static void CleanStaleDiscoveryFiles()
+    private static void DeleteOwnedDiscoveryFile()
     {
         try
         {
-            if (!Directory.Exists(DiscoveryDir))
+            if (!File.Exists(DiscoveryFilePath))
                 return;
 
-            foreach (var file in Directory.GetFiles(DiscoveryDir, "*.json"))
-            {
-                if (!int.TryParse(Path.GetFileNameWithoutExtension(file), out var pid))
-                    continue;
-
-                try
-                {
-                    System.Diagnostics.Process.GetProcessById(pid);
-                }
-                catch (ArgumentException)
-                {
-                    File.Delete(file);
-                }
-            }
+            var discovery = JsonSerializer.Deserialize<McpDebugDiscovery>(
+                File.ReadAllText(DiscoveryFilePath)
+            );
+            if (discovery?.ProcessId == Environment.ProcessId)
+                File.Delete(DiscoveryFilePath);
         }
-        catch
+        catch (Exception ex)
         {
-            // 清理失败不影响启动
+            Log.ZLogWarning($"Failed to remove MCP discovery file: {ex.Message}");
         }
     }
 
@@ -365,99 +374,99 @@ public static class McpDebugServer
                 return BuildStatusJson();
 
             case "simulate_traffic":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                var serviceId = args?["serviceId"]?.GetValue<string>();
-                var svc =
-                    (serviceId != null
-                        ? account.Services.FirstOrDefault(s => s.Service.Id == serviceId)
-                        : account.Services.FirstOrDefault())
-                    ?? throw new InvalidOperationException("Service not found (先刷新一次以发现服务)");
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var serviceId = args?["serviceId"]?.GetValue<string>();
+                    var svc =
+                        (serviceId != null
+                            ? account.Services.FirstOrDefault(s => s.Service.Id == serviceId)
+                            : account.Services.FirstOrDefault())
+                        ?? throw new InvalidOperationException("Service not found (先刷新一次以发现服务)");
 
-                var usedGB =
-                    args?["usedGB"]?.GetValue<double>()
-                    ?? throw new InvalidOperationException("usedGB is required");
-                var totalGB = args?["totalGB"]?.GetValue<double>() ?? svc.Traffic?.TotalGB ?? 1000;
+                    var usedGB =
+                        args?["usedGB"]?.GetValue<double>()
+                        ?? throw new InvalidOperationException("usedGB is required");
+                    var totalGB = args?["totalGB"]?.GetValue<double>() ?? svc.Traffic?.TotalGB ?? 1000;
 
-                svc.Traffic = new TrafficInfo(
-                    usedGB,
-                    totalGB,
-                    svc.Traffic?.ResetNotice,
-                    true
-                );
-                svc.LastUpdate = DateTime.Now;
-                svc.Simulated = true;
-                _controller.Alerts.Evaluate(account);
-                _controller.Tray.Update();
-                _controller.RebuildStatusWindow();
-                return BuildStatusJson();
-            }
+                    svc.Traffic = new TrafficInfo(
+                        usedGB,
+                        totalGB,
+                        svc.Traffic?.ResetNotice,
+                        true
+                    );
+                    svc.LastUpdate = DateTime.Now;
+                    svc.Simulated = true;
+                    _controller.Alerts.Evaluate(account);
+                    _controller.Tray.Update();
+                    _controller.RebuildStatusWindow();
+                    return BuildStatusJson();
+                }
 
             case "simulate_due_date":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                var serviceId = args?["serviceId"]?.GetValue<string>();
-                var svc =
-                    (serviceId != null
-                        ? account.Services.FirstOrDefault(s => s.Service.Id == serviceId)
-                        : account.Services.FirstOrDefault())
-                    ?? throw new InvalidOperationException("Service not found (先刷新一次以发现服务)");
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var serviceId = args?["serviceId"]?.GetValue<string>();
+                    var svc =
+                        (serviceId != null
+                            ? account.Services.FirstOrDefault(s => s.Service.Id == serviceId)
+                            : account.Services.FirstOrDefault())
+                        ?? throw new InvalidOperationException("Service not found (先刷新一次以发现服务)");
 
-                DateOnly due;
-                if (args?["daysFromNow"]?.GetValue<double>() is { } days)
-                    due = DateOnly.FromDateTime(DateTime.Now).AddDays((int)days);
-                else if (
-                    args?["date"]?.GetValue<string>() is { } text
-                    && DateOnly.TryParseExact(text, "yyyy-MM-dd", out var parsed)
-                )
-                    due = parsed;
-                else
-                    throw new InvalidOperationException(
-                        "daysFromNow or date (yyyy-MM-dd) is required"
-                    );
+                    DateOnly due;
+                    if (args?["daysFromNow"]?.GetValue<double>() is { } days)
+                        due = DateOnly.FromDateTime(DateTime.Now).AddDays((int)days);
+                    else if (
+                        args?["date"]?.GetValue<string>() is { } text
+                        && DateOnly.TryParseExact(text, "yyyy-MM-dd", out var parsed)
+                    )
+                        due = parsed;
+                    else
+                        throw new InvalidOperationException(
+                            "daysFromNow or date (yyyy-MM-dd) is required"
+                        );
 
-                svc.Service = svc.Service with { DueDate = due };
-                svc.Simulated = true;
-                svc.RenewalRemindedOn = null;
-                _controller.Alerts.Evaluate(account);
-                _controller.Tray.Update();
-                _controller.RebuildStatusWindow();
-                return BuildStatusJson();
-            }
+                    svc.Service = svc.Service with { DueDate = due };
+                    svc.Simulated = true;
+                    svc.RenewalRemindedOn = null;
+                    _controller.Alerts.Evaluate(account);
+                    _controller.Tray.Update();
+                    _controller.RebuildStatusWindow();
+                    return BuildStatusJson();
+                }
 
             case "simulate_services":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                var count = (int)(
-                    args?["count"]?.GetValue<double>()
-                    ?? throw new InvalidOperationException("count is required")
-                );
-
-                var rnd = new Random(42);
-                for (var i = 0; i < count; i++)
                 {
-                    var used = Math.Round(rnd.NextDouble() * 500, 1);
-                    account.Services.Add(
-                        new ServiceState(
-                            new VpsService(
-                                $"sim-{i}",
-                                "模拟套餐",
-                                $"SIM-{i:D2}",
-                                $"10.0.0.{i + 1}",
-                                DateOnly.FromDateTime(DateTime.Now).AddDays(3 + i)
-                            )
-                        )
-                        {
-                            Traffic = new TrafficInfo(used, 500, "2026-08-01 00:00", true),
-                            LastUpdate = DateTime.Now,
-                            Simulated = true,
-                        }
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var count = (int)(
+                        args?["count"]?.GetValue<double>()
+                        ?? throw new InvalidOperationException("count is required")
                     );
+
+                    var rnd = new Random(42);
+                    for (var i = 0; i < count; i++)
+                    {
+                        var used = Math.Round(rnd.NextDouble() * 500, 1);
+                        account.Services.Add(
+                            new ServiceState(
+                                new VpsService(
+                                    $"sim-{i}",
+                                    "模拟套餐",
+                                    $"SIM-{i:D2}",
+                                    $"10.0.0.{i + 1}",
+                                    DateOnly.FromDateTime(DateTime.Now).AddDays(3 + i)
+                                )
+                            )
+                            {
+                                Traffic = new TrafficInfo(used, 500, "2026-08-01 00:00", true),
+                                LastUpdate = DateTime.Now,
+                                Simulated = true,
+                            }
+                        );
+                    }
+                    _controller.Tray.Update();
+                    _controller.RebuildStatusWindow();
+                    return BuildStatusJson();
                 }
-                _controller.Tray.Update();
-                _controller.RebuildStatusWindow();
-                return BuildStatusJson();
-            }
 
             case "clear_simulation":
                 foreach (var acc in _controller.Accounts)
@@ -472,33 +481,33 @@ public static class McpDebugServer
                 return "Simulation cleared, refresh triggered";
 
             case "simulate_session_expired":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                account.SimulateExpired = true;
-                account.LoggedIn = false;
-                account.LoginNotified = false;
-                _controller.Alerts.NotifyLoginNeeded(account);
-                _controller.Tray.Update();
-                _controller.RebuildStatusWindow();
-                return BuildStatusJson();
-            }
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    account.SimulateExpired = true;
+                    account.LoggedIn = false;
+                    account.LoginNotified = false;
+                    _controller.Alerts.NotifyLoginNeeded(account);
+                    _controller.Tray.Update();
+                    _controller.RebuildStatusWindow();
+                    return BuildStatusJson();
+                }
 
             case "show_login_window":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                await _controller.OpenSiteAsync(account);
-                return "Login window shown";
-            }
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    await _controller.OpenSiteAsync(account);
+                    return "Login window shown";
+                }
 
             case "set_settings":
-            {
-                if (args?["pollIntervalMinutes"]?.GetValue<double>() is { } interval)
-                    SettingsManager.Settings.PollIntervalMinutes = (int)interval;
-                if (args?["alertRemainingPercent"]?.GetValue<double>() is { } threshold)
-                    SettingsManager.Settings.AlertRemainingPercent = threshold;
-                SettingsManager.Save();
-                return JsonSerializer.Serialize(SettingsManager.Settings);
-            }
+                {
+                    if (args?["pollIntervalMinutes"]?.GetValue<double>() is { } interval)
+                        SettingsManager.Settings.PollIntervalMinutes = (int)interval;
+                    if (args?["alertRemainingPercent"]?.GetValue<double>() is { } threshold)
+                        SettingsManager.Settings.AlertRemainingPercent = threshold;
+                    SettingsManager.Save();
+                    return JsonSerializer.Serialize(SettingsManager.Settings);
+                }
 
             case "get_storage_info":
                 return JsonSerializer.Serialize(
@@ -515,79 +524,79 @@ public static class McpDebugServer
                 );
 
             case "set_storage_mode":
-            {
-                var locationText =
-                    args?["location"]?.GetValue<string>()
-                    ?? throw new InvalidOperationException("location is required");
-                if (!Enum.TryParse<StorageLocation>(locationText, true, out var location))
-                    throw new InvalidOperationException(
-                        "location must be UserDirectory | ProgramDirectory | CustomDirectory"
-                    );
+                {
+                    var locationText =
+                        args?["location"]?.GetValue<string>()
+                        ?? throw new InvalidOperationException("location is required");
+                    if (!Enum.TryParse<StorageLocation>(locationText, true, out var location))
+                        throw new InvalidOperationException(
+                            "location must be UserDirectory | ProgramDirectory | CustomDirectory"
+                        );
 
-                var customDir = args?["customDir"]?.GetValue<string>();
-                if (location == StorageLocation.CustomDirectory && string.IsNullOrEmpty(customDir))
-                    throw new InvalidOperationException(
-                        "customDir is required for CustomDirectory"
-                    );
+                    var customDir = args?["customDir"]?.GetValue<string>();
+                    if (location == StorageLocation.CustomDirectory && string.IsNullOrEmpty(customDir))
+                        throw new InvalidOperationException(
+                            "customDir is required for CustomDirectory"
+                        );
 
-                var moveFiles = args?["moveFiles"]?.GetValue<bool>() ?? true;
-                SettingsManager.SwitchStorageLocation(location, customDir, moveFiles);
-                _controller.Tray.UpdateStorageChecks();
-                return $"Storage switched to {SettingsManager.Location}: {SettingsManager.RoamingConfigDir}";
-            }
+                    var moveFiles = args?["moveFiles"]?.GetValue<bool>() ?? true;
+                    SettingsManager.SwitchStorageLocation(location, customDir, moveFiles);
+                    _controller.Tray.UpdateStorageChecks();
+                    return $"Storage switched to {SettingsManager.Location}: {SettingsManager.RoamingConfigDir}";
+                }
 
             case "get_cookies":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                var cookies = await account.Session.GetCookiesAsync();
-                return JsonSerializer.Serialize(cookies, PrettyJson);
-            }
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var cookies = await account.Session.GetCookiesAsync();
+                    return JsonSerializer.Serialize(cookies, PrettyJson);
+                }
 
             case "fetch_url":
-            {
-                var account = FindAccount(args?["account"]?.GetValue<string>());
-                var url =
-                    args?["url"]?.GetValue<string>()
-                    ?? throw new InvalidOperationException("url is required");
-                var maxLength = (int)(args?["maxLength"]?.GetValue<double>() ?? 3000);
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var url =
+                        args?["url"]?.GetValue<string>()
+                        ?? throw new InvalidOperationException("url is required");
+                    var maxLength = (int)(args?["maxLength"]?.GetValue<double>() ?? 3000);
 
-                await account.Session.EnsureInitializedAsync();
-                var res = await account.Session.FetchAsync(url);
-                var body =
-                    maxLength > 0 && res.Body.Length > maxLength
-                        ? res.Body[..maxLength] + $"\n...(truncated, total {res.Body.Length})"
-                        : res.Body;
-                return $"Status: {res.Status}\nUrl: {res.Url}\n\n{body}";
-            }
+                    await account.Session.EnsureInitializedAsync();
+                    var res = await account.Session.FetchAsync(url);
+                    var body =
+                        maxLength > 0 && res.Body.Length > maxLength
+                            ? res.Body[..maxLength] + $"\n...(truncated, total {res.Body.Length})"
+                            : res.Body;
+                    return $"Status: {res.Status}\nUrl: {res.Url}\n\n{body}";
+                }
 
             case "check_stock":
                 await _controller.Stock.CheckAsync();
                 return BuildStockJson();
 
             case "simulate_stock":
-            {
-                var stock = _controller.Stock;
-                if (stock.Plans.Count == 0)
-                    await stock.CheckAsync();
-                if (stock.Plans.Count == 0)
-                    stock.Plans.Add(new StockPlan("模拟套餐", false));
+                {
+                    var stock = _controller.Stock;
+                    if (stock.Plans.Count == 0)
+                        await stock.CheckAsync();
+                    if (stock.Plans.Count == 0)
+                        stock.Plans.Add(new StockPlan("模拟套餐", false));
 
-                var planName = args?["plan"]?.GetValue<string>();
-                var plan =
-                    (planName != null
-                        ? stock.Plans.FirstOrDefault(p =>
-                            p.Name.Contains(planName, StringComparison.OrdinalIgnoreCase)
-                        )
-                        : stock.Plans.FirstOrDefault())
-                    ?? throw new InvalidOperationException($"Plan not found: {planName}");
+                    var planName = args?["plan"]?.GetValue<string>();
+                    var plan =
+                        (planName != null
+                            ? stock.Plans.FirstOrDefault(p =>
+                                p.Name.Contains(planName, StringComparison.OrdinalIgnoreCase)
+                            )
+                            : stock.Plans.FirstOrDefault())
+                        ?? throw new InvalidOperationException($"Plan not found: {planName}");
 
-                stock.Simulated = true;
-                plan.InStock = true;
-                plan.Alerted = false;
-                stock.EvaluateAlerts();
-                _controller.RebuildStatusWindow();
-                return BuildStockJson();
-            }
+                    stock.Simulated = true;
+                    plan.InStock = true;
+                    plan.Alerted = false;
+                    stock.EvaluateAlerts();
+                    _controller.RebuildStatusWindow();
+                    return BuildStockJson();
+                }
 
             case "get_alerts":
                 return _controller.Alerts.RecentAlerts.Count == 0
@@ -595,14 +604,14 @@ public static class McpDebugServer
                     : string.Join("\n", _controller.Alerts.RecentAlerts);
 
             case "check_update":
-            {
-                if (args?["baseUrl"]?.GetValue<string>() is { } baseUrl)
-                    UpdateManager.OverrideBaseUrl = baseUrl == "" ? null : baseUrl;
-                var apply = args?["apply"]?.GetValue<bool>() ?? false;
-                var result = await UpdateManager.CheckForUpdateAsync(apply);
-                return $"Result: {result}\nLocalVersion: {UpdateManager.LocalVersion}\n"
-                    + $"Updating: {UpdateManager.Updating}";
-            }
+                {
+                    if (args?["baseUrl"]?.GetValue<string>() is { } baseUrl)
+                        UpdateManager.OverrideBaseUrl = baseUrl == "" ? null : baseUrl;
+                    var apply = args?["apply"]?.GetValue<bool>() ?? false;
+                    var result = await UpdateManager.CheckForUpdateAsync(apply);
+                    return $"Result: {result}\nLocalVersion: {UpdateManager.LocalVersion}\n"
+                        + $"Updating: {UpdateManager.Updating}";
+                }
 
             case "get_update_status":
                 return JsonSerializer.Serialize(

@@ -48,18 +48,8 @@ public static class SettingsManager
         Directory.CreateDirectory(RoamingConfigDir);
         Load();
 
-        if (Settings.Accounts.Count == 0)
-        {
-            Settings.Accounts.Add(
-                new AccountConfig
-                {
-                    Name = "NovixLink",
-                    Type = "WhmcsCubeCloud",
-                    BaseUrl = "https://www.novixlink.com",
-                }
-            );
+        if (EnsureDefaultAccount())
             Save();
-        }
 
         StartWatcher();
         Log.ZLogInformation($"Settings loaded from {RoamingConfigDir} (location: {Location})");
@@ -67,7 +57,7 @@ public static class SettingsManager
 
     /// <summary>
     ///     切换存储模式。moveFiles 为 true 时整体移动 Config 目录（原目录不保留）；
-    ///     为 false 时直接把当前设置写入新位置。离开便携模式必须移动，由调用方保证。
+    ///     为 false 时直接加载目标位置已有的配置。离开便携模式时在此处强制要求移动。
     /// </summary>
     public static void SwitchStorageLocation(
         StorageLocation location,
@@ -75,34 +65,49 @@ public static class SettingsManager
         bool moveFiles
     )
     {
+        if (location == StorageLocation.CustomDirectory && string.IsNullOrWhiteSpace(customDir))
+            throw new ArgumentException(
+                "A custom directory is required for CustomDirectory.",
+                nameof(customDir)
+            );
+        if (
+            Location == StorageLocation.ProgramDirectory
+            && location != StorageLocation.ProgramDirectory
+            && !moveFiles
+        )
+        {
+            throw new InvalidOperationException(
+                "Leaving portable storage requires moving the configuration files."
+            );
+        }
+
         var newCustomDir = location == StorageLocation.CustomDirectory ? customDir ?? "" : CustomDir;
         var newConfigDir = Storage.ResolveConfigRoot(location, newCustomDir);
         var oldConfigDir = RoamingConfigDir;
+        if (string.Equals(newConfigDir, oldConfigDir, StringComparison.OrdinalIgnoreCase))
+            return;
 
         StopWatcher();
         try
         {
-            if (!string.Equals(newConfigDir, oldConfigDir, StringComparison.OrdinalIgnoreCase))
-            {
-                if (moveFiles)
-                    SettingsStorage.MoveConfigRoot(oldConfigDir, newConfigDir);
-                else
-                    Directory.CreateDirectory(newConfigDir);
-            }
+            if (moveFiles)
+                SettingsStorage.MoveConfigRoot(oldConfigDir, newConfigDir);
+            else
+                Directory.CreateDirectory(newConfigDir);
 
             Location = location;
             CustomDir = newCustomDir;
             RoamingConfigDir = newConfigDir;
 
             SaveMachineSettings();
-            if (!moveFiles)
-                Save(forceAllLocal: true);
-            else
+            Load();
+            if (EnsureDefaultAccount())
                 Save();
 
             Log.ZLogInformation(
                 $"Storage switched to {location} at {newConfigDir} (moved: {moveFiles})"
             );
+            SettingsReloaded?.Invoke();
         }
         finally
         {
@@ -133,10 +138,35 @@ public static class SettingsManager
         settings.Accounts ??= [];
         settings.PollIntervalMinutes = Math.Max(1, settings.PollIntervalMinutes);
         settings.AlertRemainingPercent = Math.Clamp(settings.AlertRemainingPercent, 0, 100);
+        settings.StockMonitorIntervalMinutes = Math.Max(1, settings.StockMonitorIntervalMinutes);
+        settings.StockMonitorUrl = settings.StockMonitorUrl?.Trim() ?? "";
+        if (
+            !Uri.TryCreate(settings.StockMonitorUrl, UriKind.Absolute, out var stockUri)
+            || stockUri.Scheme is not ("http" or "https")
+        )
+        {
+            settings.StockMonitorUrl = AppSettings.DefaultStockMonitorUrl;
+        }
         if (settings.Theme is not ("System" or "Light" or "Dark"))
             settings.Theme = "System";
         if (settings.UpdateCheckInterval is not ("Every6Hours" or "Daily" or "Weekly" or "None"))
             settings.UpdateCheckInterval = "Daily";
+    }
+
+    private static bool EnsureDefaultAccount()
+    {
+        if (Settings.Accounts.Count != 0)
+            return false;
+
+        Settings.Accounts.Add(
+            new AccountConfig
+            {
+                Name = "NovixLink",
+                Type = "WhmcsCubeCloud",
+                BaseUrl = "https://www.novixlink.com",
+            }
+        );
+        return true;
     }
 
     private static void Load()

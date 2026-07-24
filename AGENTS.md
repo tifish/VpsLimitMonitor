@@ -15,7 +15,7 @@
 
 ## Debug MCP Interface
 
-Debug builds start an MCP server (JeekTools `DebugMcpHost`) at `http://localhost:28217/mcp` (Streamable HTTP, registered in `.mcp.json` as `vpslimitmonitor-debug`). Ports are scanned upward from 28217 when taken (parallel worktrees get different ports; override with the `VPSLIMITMONITOR_MCP_PORT` env var); each instance writes a discovery file with its URL and pid to `%LOCALAPPDATA%\VpsLimitMonitor\DebugMcp\<pid>.json`.
+Debug builds start an MCP server (JeekTools `DebugMcpHost`) at `http://localhost:28217/mcp`. Ports are scanned upward from 28217 when taken (parallel worktrees get different ports; override with the `VPSLIMITMONITOR_MCP_PORT` env var). Each instance writes its URL, pid, executable path, and workspace root to `bin\debug-mcp.json`; `.mcp.json` registers the `vpslimitmonitor-debug` stdio bridge, which validates that discovery file and forwards calls to the current worktree's live HTTP endpoint.
 
 Standard object-path tools from `DebugMcpHost` (roots: `Controller`, `Settings`, `App`): `describe`, `get_value`, `set_value`, `invoke`, `list_members`, `read_logs`.
 

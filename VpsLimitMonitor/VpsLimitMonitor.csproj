@@ -16,11 +16,11 @@
     <PublishDir>$(OutDir)</PublishDir>
     <Configurations>Release;Debug</Configurations>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>Application.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Application.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <AvaloniaResource Include="Assets\app.ico" />
+    <AvaloniaResource Include="Assets\Application.ico" />
   </ItemGroup>
   <PropertyGroup>
     <BeautySharedRuntimeMode>False</BeautySharedRuntimeMode>
@@ -58,4 +58,13 @@
   <ItemGroup>
     <ProjectReference Include="..\JeekTools.NET\JeekTools.csproj" />
   </ItemGroup>
+  <Target Name="RemoveUnusedWebView2DesktopReferences" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference
+        Remove="@(Reference)"
+        Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'
+          Or '%(Reference.Filename)' == 'Microsoft.Web.WebView2.WinForms'"
+      />
+    </ItemGroup>
+  </Target>
 </Project>

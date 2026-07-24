@@ -3,4 +3,5 @@
     <Project Path="JeekTools.NET/JeekTools.csproj" />
   </Folder>
   <Project Path="VpsLimitMonitor/VpsLimitMonitor.csproj" />
+  <Project Path="tools/DebugMcpBridge/DebugMcpBridge.csproj" />
 </Solution>

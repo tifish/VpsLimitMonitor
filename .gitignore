@@ -1,6 +1,7 @@
 # Build outputs
 obj/
 bin/*
+tools/**/bin/
 !bin/.gitkeep
 !bin/Setup.cmd
 !bin/dotnet-install.ps1
