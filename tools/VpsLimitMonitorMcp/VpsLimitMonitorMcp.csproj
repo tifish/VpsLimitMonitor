@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- 单文件发布到主程序 bin：适配器从自身目录推导实例 id；
+         单文件把 runtimeconfig.json 收进 exe，NetBeauty 不会给它打 libloader 钩子。 -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishDir>..\..\bin</PublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 管道命名的唯一事实来源，与主程序共享。 -->
+    <Compile Include="..\..\VpsLimitMonitor\McpDebug\McpPipeNames.cs" Link="McpPipeNames.cs" />
+  </ItemGroup>
+
+</Project>

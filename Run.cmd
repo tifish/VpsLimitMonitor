@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
-dotnet build VpsLimitMonitor.slnx -c Debug
+call "%~dp0Build.cmd"
 if errorlevel 1 exit /b 1
 start "" "%~dp0bin\VpsLimitMonitor.exe"

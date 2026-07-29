@@ -16,18 +16,17 @@ using ZLogger;
 namespace VpsLimitMonitor.McpDebug;
 
 /// <summary>
-///     Debug 版专用的 MCP 调试接口，基于 JeekTools 的 DebugMcpHost + ObjectGraph：
+///     Debug 版专用的 MCP 调试接口，基于 JeekTools 的 McpHost + ObjectGraph：
 ///     标准工具（describe / get_value / set_value / invoke / list_members / read_logs）
-///     加应用工具，端口从 28217 起扫描并写发现文件。
+///     加应用工具，通过命名管道监听（管道名含 worktree 实例 id），由
+///     bin\VpsLimitMonitorMcp.exe stdio 适配器转发给 agent。
 /// </summary>
 public static class McpDebugServer
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(McpDebugServer));
 
-    public const int DefaultPort = 28217;
-
     private static MonitorController _controller = null!;
-    private static DebugMcpHost? _host;
+    private static McpHost? _host;
 
     private static string WorkspaceRoot
     {
@@ -48,129 +47,6 @@ public static class McpDebugServer
                 );
         }
     }
-
-    private record ToolDef(string Name, string Description, JsonObject InputSchema);
-
-    private static readonly List<ToolDef> AppTools =
-    [
-        new(
-            "get_status",
-            "获取全部账号、服务、流量、报警与托盘状态",
-            EmptySchema()
-        ),
-        new(
-            "refresh",
-            "立即执行一次完整轮询并返回最新状态",
-            EmptySchema()
-        ),
-        new(
-            "simulate_traffic",
-            "注入模拟流量数据（触发报警逻辑），serviceId 省略时作用于第一个服务",
-            Schema(
-                ("account", "string", "账号名，省略为第一个账号"),
-                ("serviceId", "string", "服务 ID，省略为该账号第一个服务"),
-                ("usedGB", "number", "已用流量 GB（必填）"),
-                ("totalGB", "number", "总流量 GB，省略保持原值")
-            )
-        ),
-        new(
-            "simulate_due_date",
-            "注入模拟到期时间（触发续费提醒逻辑），serviceId 省略时作用于第一个服务。持续到 clear_simulation",
-            Schema(
-                ("account", "string", "账号名，省略为第一个账号"),
-                ("serviceId", "string", "服务 ID，省略为该账号第一个服务"),
-                ("daysFromNow", "number", "距今天数（可为负表示已过期），与 date 二选一"),
-                ("date", "string", "到期日期 yyyy-MM-dd，与 daysFromNow 二选一")
-            )
-        ),
-        new(
-            "simulate_services",
-            "注入 N 台模拟服务器（测试面板多列布局），持续到 clear_simulation",
-            Schema(
-                ("account", "string", "账号名，省略为第一个账号"),
-                ("count", "number", "注入数量（必填）")
-            )
-        ),
-        new(
-            "clear_simulation",
-            "清除所有模拟数据并触发真实刷新",
-            EmptySchema()
-        ),
-        new(
-            "simulate_session_expired",
-            "模拟会话失效（触发登录提醒流程），刷新时该账号持续按失效处理，直到 clear_simulation",
-            Schema(("account", "string", "账号名，省略为第一个账号"))
-        ),
-        new(
-            "show_login_window",
-            "用内置浏览器打开指定账号的网站（未登录时即登录窗口）",
-            Schema(("account", "string", "账号名，省略为第一个账号"))
-        ),
-        new(
-            "set_settings",
-            "修改轮询间隔或报警阈值",
-            Schema(
-                ("pollIntervalMinutes", "number", "轮询间隔（分钟）"),
-                ("alertRemainingPercent", "number", "剩余流量报警阈值（百分比）")
-            )
-        ),
-        new(
-            "get_alerts",
-            "获取最近的报警记录",
-            EmptySchema()
-        ),
-        new(
-            "check_update",
-            "检查自动更新。baseUrl 可覆盖下载地址（以 / 结尾，用于本地模拟发布）；apply 为 true 时发现新版本会真正下载、退出并重启程序",
-            Schema(
-                ("baseUrl", "string", "覆盖版本与 zip 的下载基地址（调试用）"),
-                ("apply", "boolean", "是否实际执行更新，默认 false 仅检查")
-            )
-        ),
-        new(
-            "get_update_status",
-            "获取本地版本号、更新设置与最近一次检查结果",
-            EmptySchema()
-        ),
-        new(
-            "get_storage_info",
-            "获取配置存储模式与各候选目录",
-            EmptySchema()
-        ),
-        new(
-            "set_storage_mode",
-            "切换配置存储模式（绕过 UI 对话框，测试用）",
-            Schema(
-                ("location", "string", "UserDirectory | ProgramDirectory | CustomDirectory"),
-                ("customDir", "string", "自定义基目录，location 为 CustomDirectory 时必填"),
-                ("moveFiles", "boolean", "是否移动现有 Config 目录，默认 true")
-            )
-        ),
-        new(
-            "get_cookies",
-            "列出账号会话当前站点的 cookie（名称/域/是否会话级/过期时间，调试用）",
-            Schema(("account", "string", "账号名，省略为第一个账号"))
-        ),
-        new(
-            "check_stock",
-            "立即执行一次库存检查并返回库存状态（不受开关限制）",
-            EmptySchema()
-        ),
-        new(
-            "simulate_stock",
-            "注入模拟库存（触发放货提醒），plan 省略时标记第一个套餐有货；无真实数据时先自动检查一次。持续到 clear_simulation",
-            Schema(("plan", "string", "套餐名（子串匹配），省略为第一个套餐"))
-        ),
-        new(
-            "fetch_url",
-            "用账号会话 fetch 一个同站 URL，返回状态、最终 URL 和响应体（调试用）",
-            Schema(
-                ("account", "string", "账号名，省略为第一个账号"),
-                ("url", "string", "相对或绝对 URL（必填）"),
-                ("maxLength", "number", "响应体截断长度，默认 3000，0 为不截断")
-            )
-        ),
-    ];
 
     public static void Start(MonitorController controller)
     {
@@ -198,16 +74,15 @@ public static class McpDebugServer
             }
         );
 
-        _host = new DebugMcpHost(
-            new DebugMcpHostOptions
+        _host = new McpHost(
+            new McpHostOptions
             {
                 ServerName = "vpslimitmonitor-debug",
                 ServerTitle = "VpsLimitMonitor Debug",
                 Graph = graph,
                 GetVersion = () => UpdateManager.LocalVersion.ToString(),
-                DefaultPort = DefaultPort,
-                PortScanCount = 20,
-                PortEnvironmentVariable = "VPSLIMITMONITOR_MCP_PORT",
+                PipeName = McpPipeNames.Debug(McpPipeNames.InstanceId(AppContext.BaseDirectory)),
+                DefaultPort = 0,
                 UiInvoker = async func =>
                     await Dispatcher
                         .UIThread.InvokeAsync(func)
@@ -216,19 +91,18 @@ public static class McpDebugServer
                 Describe = () =>
                     "VPS 流量监视器调试接口。对象路径根：Controller（主控制器，含 Accounts/Alerts/Tray）、"
                     + "Settings（当前设置）、App（Avalonia Application）。"
-                    + $"应用工具：{string.Join(", ", AppTools.Select(t => t.Name))}。",
-                ToolListProvider = BuildToolList,
-                UrlChanged = OnUrlChanged,
+                    + $"应用工具：{string.Join(", ", McpDebugContract.AppTools.Select(t => t.Name))}。",
+                ToolListProvider = McpDebugContract.BuildToolList,
             }
         );
 
-        foreach (var tool in AppTools)
+        foreach (var tool in McpDebugContract.AppTools)
         {
             var name = tool.Name;
             _host.AddTool(
                 name,
                 async args =>
-                    DebugMcpHost.ToolText(
+                    McpHost.ToolText(
                         await Dispatcher
                             .UIThread.InvokeAsync(() => CallToolAsync(name, args))
                             .WaitAsync(TimeSpan.FromSeconds(120))
@@ -237,26 +111,24 @@ public static class McpDebugServer
         }
 
         _host.Start();
+        WriteDiscoveryFile();
     }
 
     public static void Stop()
     {
         _host?.Stop();
+        DeleteOwnedDiscoveryFile();
     }
 
     private static string DiscoveryFilePath =>
         Path.Combine(WorkspaceRoot, "bin", "debug-mcp.json");
 
-    private static void OnUrlChanged(string url)
+    // 发现文件只用于人工排查（管道名、进程号），不再是连接的必要条件：
+    // 适配器从自身目录推导同一个管道名。
+    private static void WriteDiscoveryFile()
     {
         try
         {
-            if (url == "")
-            {
-                DeleteOwnedDiscoveryFile();
-                return;
-            }
-
             var executablePath =
                 Environment.ProcessPath
                 ?? throw new InvalidOperationException("The current executable path is unavailable.");
@@ -265,7 +137,7 @@ public static class McpDebugServer
                 JsonSerializer.Serialize(
                     new McpDebugDiscovery
                     {
-                        Url = url,
+                        PipeName = _host?.PipeName ?? "",
                         ProcessId = Environment.ProcessId,
                         ExecutablePath = Path.GetFullPath(executablePath),
                         WorkspaceRoot = WorkspaceRoot,
@@ -297,68 +169,6 @@ public static class McpDebugServer
         {
             Log.ZLogWarning($"Failed to remove MCP discovery file: {ex.Message}");
         }
-    }
-
-    private static JsonArray BuildToolList()
-    {
-        var tools = new JsonArray();
-
-        void Add(string name, string description, JsonObject schema)
-        {
-            tools.Add(
-                new JsonObject
-                {
-                    ["name"] = name,
-                    ["description"] = description,
-                    ["inputSchema"] = schema,
-                }
-            );
-        }
-
-        Add("describe", "描述本调试接口、对象路径根与可用工具", EmptySchema());
-        Add(
-            "get_value",
-            "按对象路径读取值，如 Controller.Accounts[0].LoggedIn",
-            Schema(
-                ("path", "string", "对象路径（必填），根：Controller / Settings / App"),
-                ("depth", "number", "展开深度 0-5，默认 1")
-            )
-        );
-        Add(
-            "set_value",
-            "按对象路径写入属性、字段或列表元素",
-            Schema(
-                ("path", "string", "对象路径（必填）"),
-                ("value", "string", "新值（JSON，任意类型）")
-            )
-        );
-        Add(
-            "invoke",
-            "按对象路径调用方法或 ICommand（在 UI 线程上执行）",
-            Schema(
-                ("path", "string", "方法路径（必填），如 Controller.TriggerRefresh"),
-                ("args", "array", "参数数组，支持 {\"$path\": ...} 活对象引用"),
-                ("depth", "number", "结果展开深度 0-5，默认 1")
-            )
-        );
-        Add(
-            "list_members",
-            "列出对象路径处的成员（属性、字段、方法）",
-            Schema(("path", "string", "对象路径（必填）"))
-        );
-        Add(
-            "read_logs",
-            "读取应用日志尾部",
-            Schema(
-                ("lines", "number", "行数，默认 200，最大 2000"),
-                ("filter", "string", "只保留包含此子串的行")
-            )
-        );
-
-        foreach (var tool in AppTools)
-            Add(tool.Name, tool.Description, (JsonObject)tool.InputSchema.DeepClone());
-
-        return tools;
     }
 
     private static async Task<string> CallToolAsync(string name, JsonObject? args)
@@ -725,28 +535,6 @@ public static class McpDebugServer
         };
 
         return JsonSerializer.Serialize(payload, PrettyJson);
-    }
-
-    private static JsonObject EmptySchema()
-    {
-        return new JsonObject
-        {
-            ["type"] = "object",
-            ["properties"] = new JsonObject(),
-        };
-    }
-
-    private static JsonObject Schema(params (string Name, string Type, string Description)[] props)
-    {
-        var properties = new JsonObject();
-        foreach (var (propName, type, description) in props)
-            properties[propName] = new JsonObject
-            {
-                ["type"] = type,
-                ["description"] = description,
-            };
-
-        return new JsonObject { ["type"] = "object", ["properties"] = properties };
     }
 }
 #endif

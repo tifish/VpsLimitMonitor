@@ -4,7 +4,7 @@ namespace VpsLimitMonitor.McpDebug;
 
 public sealed class McpDebugDiscovery
 {
-    public string Url { get; set; } = "";
+    public string PipeName { get; set; } = "";
     public int ProcessId { get; set; }
     public string ExecutablePath { get; set; } = "";
     public string WorkspaceRoot { get; set; } = "";
@@ -14,11 +14,6 @@ public sealed record McpDebugTool(string Name, string Description, JsonObject In
 
 public static class McpDebugContract
 {
-    public const string SupportedProtocolVersion = "2025-06-18";
-
-    public static readonly string[] KnownProtocolVersions =
-        ["2024-11-05", "2025-03-26", SupportedProtocolVersion];
-
     public static IReadOnlyList<McpDebugTool> AppTools { get; } =
     [
         Tool("get_status", "Get accounts, services, traffic, alerts, and settings."),
@@ -188,24 +183,6 @@ public static class McpDebugContract
         }
 
         return tools;
-    }
-
-    public static JsonObject InitializeResult(string? requestedVersion)
-    {
-        var protocolVersion = KnownProtocolVersions.Contains(requestedVersion)
-            ? requestedVersion!
-            : SupportedProtocolVersion;
-        return new JsonObject
-        {
-            ["protocolVersion"] = protocolVersion,
-            ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
-            ["serverInfo"] = new JsonObject
-            {
-                ["name"] = "vpslimitmonitor-debug-bridge",
-                ["title"] = "VpsLimitMonitor Worktree Debug Bridge",
-                ["version"] = "1",
-            },
-        };
     }
 
     private static McpDebugTool Tool(
