@@ -5,7 +5,7 @@ using System.Drawing.Text;
 
 namespace VpsLimitMonitor.Tray;
 
-/// <summary>用 GDI+ 动态绘制托盘图标：圆角色块 + 白色文字（剩余百分比或状态符号）。</summary>
+/// <summary>用 GDI+ 动态绘制托盘图标：圆角色块 + 白色文字（已用百分比或状态符号）。</summary>
 public static class IconRenderer
 {
     public static MemoryStream RenderPng(string text, Color background)

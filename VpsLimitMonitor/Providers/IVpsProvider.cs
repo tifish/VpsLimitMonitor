@@ -4,6 +4,7 @@ public record VpsService(string Id, string Name, string Label, string? Ip, DateO
 
 public record TrafficInfo(double UsedGB, double TotalGB, string? ResetNotice, bool IsOnline)
 {
+    public double UsedPercent => TotalGB > 0 ? Math.Clamp(UsedGB / TotalGB * 100, 0, 100) : 0;
     public double RemainingGB => Math.Max(0, TotalGB - UsedGB);
     public double RemainingPercent => TotalGB > 0 ? RemainingGB / TotalGB * 100 : 0;
 }

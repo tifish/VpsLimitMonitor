@@ -489,6 +489,11 @@ public static class McpDebugServer
         {
             lastRefresh = _controller.LastRefresh?.ToString("yyyy-MM-dd HH:mm:ss"),
             refreshing = _controller.Refreshing,
+            tray = new
+            {
+                displayText = _controller.Tray.DisplayText,
+                toolTipText = _controller.Tray.ToolTipText,
+            },
             settings = SettingsManager.Settings,
             storageLocation = SettingsManager.Location.ToString(),
             accounts = _controller.Accounts.Select(a => new
@@ -508,6 +513,7 @@ public static class McpDebugServer
                     dueDate = s.Service.DueDate?.ToString("yyyy-MM-dd"),
                     renewalRemindedOn = s.RenewalRemindedOn?.ToString("yyyy-MM-dd"),
                     usedGB = s.Traffic?.UsedGB,
+                    usedPercent = s.Traffic?.UsedPercent,
                     totalGB = s.Traffic?.TotalGB,
                     remainingGB = s.Traffic?.RemainingGB,
                     remainingPercent = s.Traffic?.RemainingPercent,

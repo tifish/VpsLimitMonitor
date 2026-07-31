@@ -13,6 +13,9 @@ public class TrayIconManager
 {
     private const string HomePageUrl = "https://github.com/tifish/VpsLimitMonitor";
 
+    public string DisplayText { get; private set; } = "";
+    public string ToolTipText { get; private set; } = "";
+
     private readonly MonitorController _controller;
     private readonly TrayIcon _trayIcon;
     private readonly NativeMenuItem _themeSystemItem;
@@ -209,15 +212,15 @@ public class TrayIconManager
         else
         {
             var worst = states.MinBy(s => s.Traffic!.RemainingPercent)!;
-            var pct = worst.Traffic!.RemainingPercent;
-            text = Math.Round(pct).ToString("F0");
+            var remainingPercent = worst.Traffic!.RemainingPercent;
+            text = Math.Round(worst.Traffic.UsedPercent).ToString("F0");
             color =
-                pct < threshold ? System.Drawing.Color.FromArgb(217, 48, 37) // 红
-                : pct < 25 ? System.Drawing.Color.FromArgb(232, 145, 0) // 橙
+                remainingPercent < threshold ? System.Drawing.Color.FromArgb(217, 48, 37) // 红
+                : remainingPercent < 25 ? System.Drawing.Color.FromArgb(232, 145, 0) // 橙
                 : System.Drawing.Color.FromArgb(24, 128, 56); // 绿
             tooltip =
                 $"最低 {worst.Service.Label}：剩 {worst.Traffic.RemainingGB:F0} GB"
-                + $" / {worst.Traffic.TotalGB:F0} GB（{pct:F1}%）";
+                + $" / {worst.Traffic.TotalGB:F0} GB（{remainingPercent:F1}%）";
             if (_controller.LastRefresh is { } last)
                 tooltip += $"\n更新于 {last:HH:mm}";
         }
@@ -225,5 +228,7 @@ public class TrayIconManager
         using var png = IconRenderer.RenderPng(text, color);
         _trayIcon.Icon = new WindowIcon(new Bitmap(png));
         _trayIcon.ToolTipText = tooltip.Length > 120 ? tooltip[..120] : tooltip;
+        DisplayText = text;
+        ToolTipText = _trayIcon.ToolTipText;
     }
 }
