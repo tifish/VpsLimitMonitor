@@ -28,10 +28,10 @@ jobs:
           $count = git rev-list --count HEAD
           "count=$count" >> $env:GITHUB_OUTPUT
 
-      - name: Publish
+      - name: Build Release
         shell: pwsh
         run: |
-          dotnet publish VpsLimitMonitor/VpsLimitMonitor.csproj -c Release -p:Version=${{ steps.version.outputs.count }}.0.0.0
+          dotnet build VpsLimitMonitor/VpsLimitMonitor.csproj -c Release -p:Version=${{ steps.version.outputs.count }}.0.0.0
           if ($LASTEXITCODE -ne 0) { exit 1 }
           dotnet publish tools/VpsLimitMonitorMcp/VpsLimitMonitorMcp.csproj -c Release
 

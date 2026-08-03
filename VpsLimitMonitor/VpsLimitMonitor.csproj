@@ -12,7 +12,6 @@
     <OutDir>..\bin</OutDir>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <CETCompat>false</CETCompat>
-    <PublishReadyToRun>true</PublishReadyToRun>
     <PublishDir>$(OutDir)</PublishDir>
     <Configurations>Release;Debug</Configurations>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
