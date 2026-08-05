@@ -92,6 +92,7 @@ public class MonitorController
             return;
 
         Refreshing = true;
+        await NotifyUiAsync();
         try
         {
             var anyRefreshed = false;
@@ -105,8 +106,7 @@ public class MonitorController
         finally
         {
             Refreshing = false;
-            Tray.Update();
-            _statusWindow?.Rebuild();
+            await NotifyUiAsync();
         }
     }
 
@@ -143,6 +143,11 @@ public class MonitorController
                 !s.Simulated && services.All(x => x.Id != s.Service.Id)
             );
 
+            // 服务列表到位后先刷一次面板，让各卡显示「等待数据…」
+            account.LoggedIn = true;
+            account.Error = null;
+            await NotifyUiAsync();
+
             foreach (var svc in account.Services)
             {
                 if (svc.Simulated)
@@ -165,11 +170,12 @@ public class MonitorController
                         $"{account.Config.Name} {svc.Service.Label}: fetch failed: {ex.Message}"
                     );
                 }
+
+                // 每拿到一台服务器就刷新面板与托盘，不必等整轮结束
+                await NotifyUiAsync();
             }
 
-            account.LoggedIn = true;
             account.LoginNotified = false;
-            account.Error = null;
             account.LastPoll = DateTime.Now;
             Alerts.Evaluate(account);
 
@@ -192,14 +198,31 @@ public class MonitorController
             account.LoggedIn = false;
             Log.ZLogWarning($"{account.Config.Name}: session expired");
             Alerts.NotifyLoginNeeded(account);
+            await NotifyUiAsync();
             return false;
         }
         catch (Exception ex)
         {
             account.Error = ex.Message;
             Log.ZLogError($"{account.Config.Name}: refresh failed: {ex}");
+            await NotifyUiAsync();
             return false;
         }
+    }
+
+    /// <summary>把当前内存状态同步到托盘图标与状态面板，并让出一帧以便立刻绘制。</summary>
+    private async Task NotifyUiAsync()
+    {
+        Tray.Update();
+        _statusWindow?.Rebuild();
+        // 刷新循环在 UI 线程上跑：若不主动让出，Avalonia 要等下一次网络 await 才有机会布局绘制
+        await Dispatcher.UIThread.InvokeAsync(static () => { }, DispatcherPriority.Render);
+    }
+
+    private void NotifyUi()
+    {
+        Tray.Update();
+        _statusWindow?.Rebuild();
     }
 
     public void TriggerRefresh()
@@ -247,8 +270,7 @@ public class MonitorController
             account.Session.HideLoginWindow();
             Alerts.ShowToast("VPS 流量监视", $"{account.Config.Name} 登录成功，已恢复监控");
         }
-        Tray.Update();
-        _statusWindow?.Rebuild();
+        NotifyUi();
     }
 
     private async Task OnLoginWindowClosedAsync(AccountState account)
@@ -256,8 +278,7 @@ public class MonitorController
         // 用户关掉登录窗口后立即重试抓取
         if (await RefreshAccountAsync(account))
             LastRefresh = DateTime.Now;
-        Tray.Update();
-        _statusWindow?.Rebuild();
+        NotifyUi();
     }
 
     public void ToggleStatusWindow()

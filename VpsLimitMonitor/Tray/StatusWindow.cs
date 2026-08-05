@@ -82,12 +82,23 @@ public class StatusWindow : Window
         var refreshButton = new Button { Content = "立即刷新" };
         refreshButton.Click += (_, _) => _controller.TriggerRefresh();
         topBar.Children.Add(refreshButton);
-        if (_controller.LastRefresh is { } last)
+        if (_controller.Refreshing)
         {
             topBar.Children.Add(
                 new TextBlock
                 {
-                    Text = _controller.Refreshing ? "刷新中…" : $"更新于 {last:HH:mm:ss}",
+                    Text = "刷新中…",
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Opacity = 0.6,
+                }
+            );
+        }
+        else if (_controller.LastRefresh is { } last)
+        {
+            topBar.Children.Add(
+                new TextBlock
+                {
+                    Text = $"更新于 {last:HH:mm:ss}",
                     VerticalAlignment = VerticalAlignment.Center,
                     Opacity = 0.6,
                 }
