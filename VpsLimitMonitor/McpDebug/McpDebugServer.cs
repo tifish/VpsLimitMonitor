@@ -178,6 +178,9 @@ public static class McpDebugServer
             case "get_status":
                 return BuildStatusJson();
 
+            case "get_tray_icon":
+                return BuildTrayIconJson();
+
             case "refresh":
                 _controller.TriggerRefresh();
                 await _controller.RefreshAllAsync();
@@ -493,6 +496,7 @@ public static class McpDebugServer
             {
                 displayText = _controller.Tray.DisplayText,
                 toolTipText = _controller.Tray.ToolTipText,
+                backgroundColor = _controller.Tray.BackgroundColor,
             },
             settings = SettingsManager.Settings,
             storageLocation = SettingsManager.Location.ToString(),
@@ -541,6 +545,21 @@ public static class McpDebugServer
         };
 
         return JsonSerializer.Serialize(payload, PrettyJson);
+    }
+
+    private static string BuildTrayIconJson()
+    {
+        var tray = _controller.Tray;
+        return JsonSerializer.Serialize(
+            new
+            {
+                displayText = tray.DisplayText,
+                toolTipText = tray.ToolTipText,
+                backgroundColor = tray.BackgroundColor,
+                pngBase64 = Convert.ToBase64String(tray.IconPng),
+            },
+            PrettyJson
+        );
     }
 }
 #endif

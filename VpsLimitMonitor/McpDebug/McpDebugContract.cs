@@ -17,6 +17,7 @@ public static class McpDebugContract
     public static IReadOnlyList<McpDebugTool> AppTools { get; } =
     [
         Tool("get_status", "Get accounts, services, traffic, alerts, and settings."),
+        Tool("get_tray_icon", "Get the rendered tray icon and its display properties."),
         Tool("refresh", "Run a full poll immediately and return the latest status."),
         Tool(
             "simulate_traffic",

@@ -23,16 +23,20 @@ public static class IconRenderer
 
         var fontSize = text.Length switch
         {
-            <= 1 => 20f,
-            2 => 17f,
-            _ => 12f,
+            <= 1 => 23f,
+            2 => 20f,
+            _ => 14f,
         };
         using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
         using var format = new StringFormat
         {
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoWrap,
         };
+        using var outlineBrush = new SolidBrush(Color.FromArgb(210, 0, 0, 0));
+        foreach (var (x, y) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
+            g.DrawString(text, font, outlineBrush, new RectangleF(x, y + 1, size, size), format);
         g.DrawString(text, font, Brushes.White, new RectangleF(0, 1, size, size), format);
 
         var ms = new MemoryStream();

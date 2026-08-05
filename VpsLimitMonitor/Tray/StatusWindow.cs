@@ -275,28 +275,57 @@ public class StatusWindow : Window
         if (svc.Simulated)
             title += "（模拟数据）";
 
-        panel.Children.Add(new TextBlock { Text = title, FontWeight = FontWeight.SemiBold });
+        var titleRow = new DockPanel();
+        var alert = false;
+        if (svc.Traffic is { } t)
+        {
+            alert =
+                t.RemainingPercent
+                < Settings.SettingsManager.Settings.AlertRemainingPercent;
+            var pctLabel = new TextBlock
+            {
+                Text = $"{t.UsedPercent:F1}%",
+                FontWeight = FontWeight.SemiBold,
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            if (alert)
+                pctLabel.Foreground = Brushes.OrangeRed;
+            DockPanel.SetDock(pctLabel, Dock.Right);
+            titleRow.Children.Add(pctLabel);
+        }
+        titleRow.Children.Add(
+            new TextBlock
+            {
+                Text = title,
+                FontWeight = FontWeight.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+            }
+        );
+        panel.Children.Add(titleRow);
 
         if (svc.Traffic is { } traffic)
         {
-            var usedPct = traffic.TotalGB > 0 ? traffic.UsedGB / traffic.TotalGB * 100 : 0;
             var bar = new ProgressBar
             {
                 Minimum = 0,
                 Maximum = 100,
-                Value = Math.Clamp(usedPct, 0, 100),
+                Value = Math.Clamp(traffic.UsedPercent, 0, 100),
                 Height = 8,
             };
-            if (
-                traffic.RemainingPercent
-                < Settings.SettingsManager.Settings.AlertRemainingPercent
-            )
+            if (alert)
                 bar.Foreground = Brushes.OrangeRed;
+
             panel.Children.Add(bar);
-            var line =
-                $"已用 {traffic.UsedGB:F1} / {traffic.TotalGB:F0} GB"
-                + $" · 剩 {traffic.RemainingGB:F1} GB（{traffic.RemainingPercent:F1}%）";
-            panel.Children.Add(new TextBlock { Text = line });
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Text =
+                        $"已用 {traffic.UsedGB:F1} / {traffic.TotalGB:F0} GB"
+                        + $" · 剩 {traffic.RemainingGB:F1} GB",
+                }
+            );
 
             if (traffic.ResetNotice is { } reset)
                 panel.Children.Add(

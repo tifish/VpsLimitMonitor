@@ -1,6 +1,6 @@
 # VpsLimitMonitor
 
-Windows 托盘 VPS 流量监视器：轮询 VPS 面板的流量数据，托盘图标实时显示剩余流量百分比，低于阈值时弹出 Toast 报警；会话失效时提醒重新登录（WebView2 登录窗口）。
+Windows 托盘 VPS 流量监视器：轮询 VPS 面板的流量数据，托盘图标实时显示已用流量百分比，剩余低于阈值时弹出 Toast 报警；会话失效时提醒重新登录（WebView2 登录窗口）。
 
 ## 安装
 

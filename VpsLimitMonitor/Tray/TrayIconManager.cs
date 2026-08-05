@@ -12,9 +12,19 @@ namespace VpsLimitMonitor.Tray;
 public class TrayIconManager
 {
     private const string HomePageUrl = "https://github.com/tifish/VpsLimitMonitor";
+    private static readonly System.Drawing.Color CriticalColor =
+        System.Drawing.Color.FromArgb(179, 38, 30);
+    private static readonly System.Drawing.Color WarningColor =
+        System.Drawing.Color.FromArgb(145, 82, 0);
+    private static readonly System.Drawing.Color NormalColor =
+        System.Drawing.Color.FromArgb(11, 110, 49);
+    private static readonly System.Drawing.Color WaitingColor =
+        System.Drawing.Color.FromArgb(75, 85, 99);
 
     public string DisplayText { get; private set; } = "";
     public string ToolTipText { get; private set; } = "";
+    public string BackgroundColor { get; private set; } = "";
+    public byte[] IconPng { get; private set; } = [];
 
     private readonly MonitorController _controller;
     private readonly TrayIcon _trayIcon;
@@ -200,27 +210,28 @@ public class TrayIconManager
         if (loggedOut.Count > 0)
         {
             text = "!";
-            color = System.Drawing.Color.FromArgb(217, 48, 37); // 红
+            color = CriticalColor;
             tooltip = $"需要登录：{string.Join("、", loggedOut.Select(a => a.Config.Name))}";
         }
         else if (states.Count == 0)
         {
             text = "…";
-            color = System.Drawing.Color.FromArgb(120, 120, 120); // 灰
+            color = WaitingColor;
             tooltip = "VPS 流量监视器（等待数据）";
         }
         else
         {
             var worst = states.MinBy(s => s.Traffic!.RemainingPercent)!;
             var remainingPercent = worst.Traffic!.RemainingPercent;
-            text = Math.Round(worst.Traffic.UsedPercent).ToString("F0");
+            var usedPercent = worst.Traffic.UsedPercent;
+            text = Math.Round(usedPercent).ToString("F0");
             color =
-                remainingPercent < threshold ? System.Drawing.Color.FromArgb(217, 48, 37) // 红
-                : remainingPercent < 25 ? System.Drawing.Color.FromArgb(232, 145, 0) // 橙
-                : System.Drawing.Color.FromArgb(24, 128, 56); // 绿
+                remainingPercent < threshold ? CriticalColor
+                : remainingPercent < 25 ? WarningColor
+                : NormalColor;
             tooltip =
-                $"最低 {worst.Service.Label}：剩 {worst.Traffic.RemainingGB:F0} GB"
-                + $" / {worst.Traffic.TotalGB:F0} GB（{remainingPercent:F1}%）";
+                $"最高用量 {worst.Service.Label}：已用 {worst.Traffic.UsedGB:F0}"
+                + $" / {worst.Traffic.TotalGB:F0} GB（{usedPercent:F1}%）";
             if (_controller.LastRefresh is { } last)
                 tooltip += $"\n更新于 {last:HH:mm}";
         }
@@ -230,5 +241,7 @@ public class TrayIconManager
         _trayIcon.ToolTipText = tooltip.Length > 120 ? tooltip[..120] : tooltip;
         DisplayText = text;
         ToolTipText = _trayIcon.ToolTipText;
+        BackgroundColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        IconPng = png.ToArray();
     }
 }
