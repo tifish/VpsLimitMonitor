@@ -10,6 +10,7 @@ using ZLogger;
 namespace VpsLimitMonitor.Web;
 
 public record FetchResult(int Status, string Url, string Body);
+public record BrowserWindowInfo(string Title, string Url, bool IsVisible);
 
 /// <summary>
 ///     基于 WebView2 的站点会话。所有账号共用默认 Profile（数据目录固定在
@@ -30,6 +31,7 @@ public class WebSession(string baseUrl, string accountName)
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _webView;
     private Task? _initTask;
+    private readonly List<BrowserWindowHost> _browserWindows = [];
 
     private readonly Dictionary<string, TaskCompletionSource<JsonElement>> _pendingMessages = [];
 
@@ -40,6 +42,11 @@ public class WebSession(string baseUrl, string accountName)
     public event Action? LoginWindowNavigated;
 
     public bool IsLoginWindowVisible => _window?.IsVisible == true;
+
+    public IReadOnlyList<BrowserWindowInfo> BrowserWindows =>
+        _browserWindows
+            .Select(w => new BrowserWindowInfo(w.Window.Title ?? "", w.Url, w.Window.IsVisible))
+            .ToArray();
 
     public Task EnsureInitializedAsync()
     {
@@ -277,6 +284,38 @@ public class WebSession(string baseUrl, string accountName)
         await NavigateAndWaitAsync(url);
     }
 
+    public async Task OpenNewWindowAsync(string url, string title)
+    {
+        await EnsureInitializedAsync();
+
+        var window = new Window
+        {
+            Title = title,
+            Icon = App.AppIcon,
+            Width = 1000,
+            Height = 760,
+            ShowInTaskbar = true,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var handle =
+            window.TryGetPlatformHandle()?.Handle
+            ?? throw new InvalidOperationException("Failed to get window handle");
+        var controller = await _environment!.CreateCoreWebView2ControllerAsync(handle);
+        var host = new BrowserWindowHost(window, controller, url);
+        _browserWindows.Add(host);
+        window.SizeChanged += (_, _) => UpdateControllerBounds(window, controller);
+        window.Closing += (_, _) =>
+        {
+            _browserWindows.Remove(host);
+            controller.IsVisible = false;
+        };
+        controller.IsVisible = true;
+        UpdateControllerBounds(window, controller);
+        window.Show();
+        window.Activate();
+        controller.CoreWebView2.Navigate(url);
+    }
+
     public void HideLoginWindow()
     {
         if (_controller != null)
@@ -289,12 +328,19 @@ public class WebSession(string baseUrl, string accountName)
         if (_window == null || _controller == null)
             return;
 
-        var scale = _window.RenderScaling;
-        _controller.Bounds = new System.Drawing.Rectangle(
+        UpdateControllerBounds(_window, _controller);
+    }
+
+    private static void UpdateControllerBounds(Window window, CoreWebView2Controller controller)
+    {
+        var scale = window.RenderScaling;
+        controller.Bounds = new System.Drawing.Rectangle(
             0,
             0,
-            (int)(_window.ClientSize.Width * scale),
-            (int)(_window.ClientSize.Height * scale)
+            (int)(window.ClientSize.Width * scale),
+            (int)(window.ClientSize.Height * scale)
         );
     }
+
+    private sealed record BrowserWindowHost(Window Window, CoreWebView2Controller Controller, string Url);
 }

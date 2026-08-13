@@ -27,6 +27,9 @@ public interface IVpsProvider
     /// <summary>会话失效时登录窗口打开的地址。</summary>
     string LoginUrl { get; }
 
+    /// <summary>Returns the browser URL for a service details page.</summary>
+    string GetServiceUrl(VpsService service);
+
     Task<bool> IsLoggedInAsync();
 
     /// <summary>发现该账号下的所有 VPS 服务。</summary>

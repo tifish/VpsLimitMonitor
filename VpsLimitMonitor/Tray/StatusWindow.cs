@@ -188,7 +188,7 @@ public class StatusWindow : Window
             };
             foreach (var svc in account.Services)
             {
-                var card = BuildServiceRow(svc);
+                var card = BuildServiceRow(account, svc);
                 card.Margin = new Thickness(0, 0, 16, 6);
                 wrap.Children.Add(card);
             }
@@ -274,7 +274,7 @@ public class StatusWindow : Window
         return panel;
     }
 
-    private Control BuildServiceRow(ServiceState svc)
+    private Control BuildServiceRow(AccountState account, ServiceState svc)
     {
         var panel = new StackPanel { Spacing = 3 };
 
@@ -383,6 +383,17 @@ public class StatusWindow : Window
             panel.Children.Add(line);
         }
 
-        return panel;
+        var button = new Button
+        {
+            Content = panel,
+            Background = Brushes.Transparent,
+            BorderBrush = Brushes.Transparent,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            IsTabStop = false,
+        };
+        button.Click += (_, _) => _ = _controller.OpenServiceAsync(account, svc.Service);
+        return button;
     }
 }

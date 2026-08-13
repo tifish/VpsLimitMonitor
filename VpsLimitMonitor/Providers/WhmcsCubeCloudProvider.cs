@@ -16,6 +16,9 @@ public partial class WhmcsCubeCloudProvider(WebSession session) : IVpsProvider
 
     public string LoginUrl => $"{session.BaseUrl}/clientarea.php";
 
+    public string GetServiceUrl(VpsService service) =>
+        $"{session.BaseUrl}/clientarea.php?action=productdetails&id={Uri.EscapeDataString(service.Id)}";
+
     [GeneratedRegex(@"VM-[A-Za-z0-9]+")]
     private static partial Regex LabelRegex();
 

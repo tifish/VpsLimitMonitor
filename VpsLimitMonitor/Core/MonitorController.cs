@@ -242,6 +242,14 @@ public class MonitorController
         await account.Session.ShowWindowAsync(account.Provider.LoginUrl, title);
     }
 
+    public async Task OpenServiceAsync(AccountState account, VpsService service)
+    {
+        await account.Session.OpenNewWindowAsync(
+            account.Provider.GetServiceUrl(service),
+            $"{service.Label} - {account.Config.Name}"
+        );
+    }
+
     private async Task OnLoginWindowNavigatedAsync(AccountState account)
     {
         // 登录窗口里每次页面跳转都探测一次：登录成功后无需等窗口关闭即恢复状态

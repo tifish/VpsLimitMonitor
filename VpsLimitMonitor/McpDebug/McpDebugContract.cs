@@ -61,6 +61,15 @@ public static class McpDebugContract
             [Prop("account", "string", "Account name; defaults to the first account.")]
         ),
         Tool(
+            "open_service_window",
+            "Open a service details page in a new embedded browser window.",
+            [
+                Prop("account", "string", "Account name; defaults to the first account."),
+                Prop("serviceId", "string", "Service ID; defaults to the first service."),
+            ]
+        ),
+        Tool("get_browser_windows", "List embedded browser windows opened by account sessions."),
+        Tool(
             "set_settings",
             "Change polling and traffic alert settings.",
             [

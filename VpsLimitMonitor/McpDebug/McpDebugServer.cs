@@ -312,6 +312,25 @@ public static class McpDebugServer
                     return "Login window shown";
                 }
 
+            case "open_service_window":
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var serviceId = args?["serviceId"]?.GetValue<string>();
+                    var service =
+                        (serviceId == null
+                            ? account.Services.FirstOrDefault()
+                            : account.Services.FirstOrDefault(s => s.Service.Id == serviceId))
+                        ?? throw new InvalidOperationException("Service not found");
+                    await _controller.OpenServiceAsync(account, service.Service);
+                    return JsonSerializer.Serialize(account.Session.BrowserWindows, PrettyJson);
+                }
+
+            case "get_browser_windows":
+                return JsonSerializer.Serialize(
+                    _controller.Accounts.ToDictionary(a => a.Config.Name, a => a.Session.BrowserWindows),
+                    PrettyJson
+                );
+
             case "set_settings":
                 {
                     if (args?["pollIntervalMinutes"]?.GetValue<double>() is { } interval)
