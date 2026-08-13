@@ -26,6 +26,8 @@ public class MonitorController
     public TrayIconManager Tray { get; private set; } = null!;
     public DateTime? LastRefresh { get; private set; }
     public bool Refreshing { get; private set; }
+    public int ServerCount => Accounts.Sum(account => account.Services.Count);
+    public string ServerCountText => $"服务器总数：{ServerCount}";
 
     private StatusWindow? _statusWindow;
     private CancellationTokenSource _pollDelayCts = new();

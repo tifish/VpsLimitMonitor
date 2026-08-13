@@ -511,6 +511,8 @@ public static class McpDebugServer
         {
             lastRefresh = _controller.LastRefresh?.ToString("yyyy-MM-dd HH:mm:ss"),
             refreshing = _controller.Refreshing,
+            serverCount = _controller.ServerCount,
+            serverCountText = _controller.ServerCountText,
             tray = new
             {
                 displayText = _controller.Tray.DisplayText,

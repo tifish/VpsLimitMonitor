@@ -77,7 +77,7 @@ public class StatusWindow : Window
 
         var root = new StackPanel { Margin = new Thickness(16), Spacing = 10 };
 
-        // 顶栏：刷新按钮、刷新时间与版本号
+        // 顶栏：刷新按钮、刷新时间、服务器总数与版本号
         var topBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var refreshButton = new Button { Content = "立即刷新" };
         refreshButton.Click += (_, _) => _controller.TriggerRefresh();
@@ -104,6 +104,14 @@ public class StatusWindow : Window
                 }
             );
         }
+        topBar.Children.Add(
+            new TextBlock
+            {
+                Text = _controller.ServerCountText,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.6,
+            }
+        );
         topBar.Children.Add(
             new TextBlock
             {
