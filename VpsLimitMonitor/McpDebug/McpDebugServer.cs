@@ -186,6 +186,13 @@ public static class McpDebugServer
                 await _controller.RefreshAllAsync();
                 return BuildStatusJson();
 
+            case "refresh_account":
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    await _controller.RefreshAccountAsync(account);
+                    return BuildStatusJson();
+                }
+
             case "simulate_traffic":
                 {
                     var account = FindAccount(args?["account"]?.GetValue<string>());

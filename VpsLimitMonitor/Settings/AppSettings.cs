@@ -13,6 +13,7 @@ public class AppSettings
         "https://novixlink.com/store/us-lacup-isp";
 
     public List<AccountConfig> Accounts { get; set; } = [];
+    public int BuiltInAccountsVersion { get; set; }
     public int PollIntervalMinutes { get; set; } = 30;
     public double AlertRemainingPercent { get; set; } = 10;
     public string Theme { get; set; } = "System"; // System | Light | Dark

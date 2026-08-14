@@ -123,12 +123,65 @@ public class StatusWindow : Window
         root.Children.Add(topBar);
 
         var stockEnabled = Settings.SettingsManager.Settings.StockMonitorEnabled;
-        // 服务器区实际宽度（列数决定），库存行以此为宽度上限折行，避免反过来撑宽窗口
-        var contentWidth = ServiceCardWidth;
+        const double columnSpacing = 16;
+        var columnWidth = ServiceCardWidth + columnSpacing;
 
-        foreach (var account in _controller.Accounts)
+        if (stockEnabled)
         {
-            var header = new DockPanel();
+            var stockSection = BuildStockSection();
+            stockSection.MaxWidth = Math.Max(
+                ServiceCardWidth,
+                _controller.Accounts.Count * columnWidth
+            );
+            stockSection.HorizontalAlignment = HorizontalAlignment.Left;
+            root.Children.Add(stockSection);
+        }
+
+        root.Measure(Size.Infinity);
+        var accountColumnsMaxHeight = Math.Max(160, maxHeight - root.DesiredSize.Height - 32);
+        var serviceColumnsMaxHeight = Math.Max(100, accountColumnsMaxHeight - 42);
+        var accountsPanel = new StackPanel
+        {
+            Name = "AccountColumns",
+            Orientation = Orientation.Horizontal,
+        };
+
+        for (var accountIndex = 0; accountIndex < _controller.Accounts.Count; accountIndex++)
+        {
+            var account = _controller.Accounts[accountIndex];
+            if (accountIndex > 0)
+            {
+                accountsPanel.Children.Add(new Border
+                {
+                    Name = $"AccountSeparator{accountIndex}",
+                    Width = 1,
+                    Margin = new Thickness(8, 0, 24, 0),
+                    Background = Brushes.Gray,
+                    Opacity = 0.5,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                });
+            }
+
+            var accountGroup = new StackPanel
+            {
+                Name = $"AccountGroup{accountIndex}",
+                Spacing = 6,
+            };
+            var serviceColumns = new WrapPanel
+            {
+                Name = $"AccountColumn{accountIndex}",
+                Orientation = Orientation.Vertical,
+                ItemWidth = columnWidth,
+                MaxHeight = serviceColumnsMaxHeight,
+            };
+            var header = new DockPanel
+            {
+                Name = $"AccountHeader{accountIndex}",
+                MinWidth = ServiceCardWidth,
+                MinHeight = 36,
+                Margin = new Thickness(0, 0, columnSpacing, 0),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+            };
             header.Children.Add(
                 new TextBlock
                 {
@@ -151,73 +204,58 @@ public class StatusWindow : Window
                 header.Children.Insert(0, loginButton);
             }
 
-            root.Children.Add(header);
+            accountGroup.Children.Add(header);
 
             if (!account.LoggedIn)
             {
-                root.Children.Add(
-                    new TextBlock
-                    {
-                        Text = "登录已失效，请重新登录",
-                        Foreground = Brushes.OrangeRed,
-                    }
-                );
+                serviceColumns.Children.Add(new TextBlock
+                {
+                    Width = ServiceCardWidth,
+                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Text = "登录已失效，请重新登录",
+                    Foreground = Brushes.OrangeRed,
+                });
             }
             else if (account.Error != null)
             {
-                root.Children.Add(
-                    new TextBlock
-                    {
-                        Text = $"刷新失败：{account.Error}",
-                        Foreground = Brushes.OrangeRed,
-                        TextWrapping = TextWrapping.Wrap,
-                    }
-                );
+                serviceColumns.Children.Add(new TextBlock
+                {
+                    Width = ServiceCardWidth,
+                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Text = $"刷新失败：{account.Error}",
+                    Foreground = Brushes.OrangeRed,
+                    TextWrapping = TextWrapping.Wrap,
+                });
             }
             else if (account.Services.Count == 0)
             {
-                root.Children.Add(new TextBlock { Text = "正在获取服务列表…" });
+                serviceColumns.Children.Add(new TextBlock
+                {
+                    Width = ServiceCardWidth,
+                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Text = "正在获取服务列表…",
+                });
             }
 
-            if (account.Services.Count == 0)
-                continue;
-
-            // 多列排布：量出上方内容高度（给库存行预留一行），剩余空间即每列高度，放不下时向右换列
-            root.Measure(Size.Infinity);
-            var stockReserve = stockEnabled ? 60 : 0;
-            var wrap = new WrapPanel
-            {
-                Orientation = Orientation.Vertical,
-                ItemWidth = ServiceCardWidth,
-                MaxHeight = Math.Max(
-                    160,
-                    maxHeight - root.DesiredSize.Height - stockReserve - 16
-                ),
-            };
             foreach (var svc in account.Services)
             {
                 var card = BuildServiceRow(account, svc);
-                card.Margin = new Thickness(0, 0, 16, 6);
-                wrap.Children.Add(card);
+                card.Width = ServiceCardWidth;
+                card.Margin = new Thickness(0, 0, columnSpacing, 6);
+                serviceColumns.Children.Add(card);
             }
-            root.Children.Add(wrap);
 
-            wrap.Measure(Size.Infinity);
-            contentWidth = Math.Max(contentWidth, wrap.DesiredSize.Width);
+            accountGroup.Children.Add(serviceColumns);
+            accountsPanel.Children.Add(accountGroup);
         }
 
-        if (stockEnabled)
-        {
-            var stockSection = BuildStockSection();
-            stockSection.MaxWidth = contentWidth;
-            stockSection.HorizontalAlignment = HorizontalAlignment.Left;
-            root.Children.Insert(1, stockSection);
-        }
+        root.Children.Add(accountsPanel);
 
         Content = new ScrollViewer
         {
             Content = root,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
     }
 

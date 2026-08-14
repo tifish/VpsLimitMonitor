@@ -113,7 +113,7 @@ public class MonitorController
     }
 
     /// <summary>刷新单个账号，返回是否真正取到了数据。</summary>
-    private async Task<bool> RefreshAccountAsync(AccountState account)
+    internal async Task<bool> RefreshAccountAsync(AccountState account)
     {
         try
         {

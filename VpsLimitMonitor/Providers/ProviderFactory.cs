@@ -10,6 +10,7 @@ public static class ProviderFactory
         return config.Type switch
         {
             "WhmcsCubeCloud" => new WhmcsCubeCloudProvider(session),
+            "IdcSystemKvm" => new IdcSystemKvmProvider(session),
             _ => throw new NotSupportedException($"Unknown provider type: {config.Type}"),
         };
     }

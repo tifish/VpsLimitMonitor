@@ -154,7 +154,7 @@ public class WebSession(string baseUrl, string accountName)
     {
         var source = _webView!.Source ?? "";
         if (!source.StartsWith(BaseUrl, StringComparison.OrdinalIgnoreCase))
-            await NavigateAndWaitAsync($"{BaseUrl}/clientarea.php");
+            await NavigateAndWaitAsync($"{BaseUrl}/");
     }
 
     /// <summary>

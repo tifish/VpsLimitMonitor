@@ -19,6 +19,7 @@ public class MachineSettings
 public static class SettingsManager
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(SettingsManager));
+    private const int CurrentBuiltInAccountsVersion = 1;
 
     public const string AppName = "VpsLimitMonitor";
 
@@ -48,7 +49,7 @@ public static class SettingsManager
         Directory.CreateDirectory(RoamingConfigDir);
         Load();
 
-        if (EnsureDefaultAccount())
+        if (EnsureBuiltInAccounts())
             Save();
 
         StartWatcher();
@@ -101,7 +102,7 @@ public static class SettingsManager
 
             SaveMachineSettings();
             Load();
-            if (EnsureDefaultAccount())
+            if (EnsureBuiltInAccounts())
                 Save();
 
             Log.ZLogInformation(
@@ -153,19 +154,44 @@ public static class SettingsManager
             settings.UpdateCheckInterval = "Daily";
     }
 
-    private static bool EnsureDefaultAccount()
+    private static bool EnsureBuiltInAccounts()
     {
-        if (Settings.Accounts.Count != 0)
+        if (Settings.BuiltInAccountsVersion >= CurrentBuiltInAccountsVersion)
             return false;
 
-        Settings.Accounts.Add(
-            new AccountConfig
-            {
-                Name = "NovixLink",
-                Type = "WhmcsCubeCloud",
-                BaseUrl = "https://www.novixlink.com",
-            }
-        );
+        if (Settings.Accounts.Count == 0)
+        {
+            Settings.Accounts.Add(
+                new AccountConfig
+                {
+                    Name = "NovixLink",
+                    Type = "WhmcsCubeCloud",
+                    BaseUrl = "https://www.novixlink.com",
+                }
+            );
+        }
+
+        if (
+            !Settings.Accounts.Any(account =>
+                string.Equals(
+                    account.BaseUrl.TrimEnd('/'),
+                    "https://my.hostyun.com",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+        )
+        {
+            Settings.Accounts.Add(
+                new AccountConfig
+                {
+                    Name = "HostYun",
+                    Type = "IdcSystemKvm",
+                    BaseUrl = "https://my.hostyun.com",
+                }
+            );
+        }
+
+        Settings.BuiltInAccountsVersion = CurrentBuiltInAccountsVersion;
         return true;
     }
 

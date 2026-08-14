@@ -20,6 +20,11 @@ public static class McpDebugContract
         Tool("get_tray_icon", "Get the rendered tray icon and its display properties."),
         Tool("refresh", "Run a full poll immediately and return the latest status."),
         Tool(
+            "refresh_account",
+            "Poll one account immediately and return the latest status.",
+            [Prop("account", "string", "Account name; defaults to the first account.")]
+        ),
+        Tool(
             "simulate_traffic",
             "Inject traffic data until clear_simulation.",
             [
