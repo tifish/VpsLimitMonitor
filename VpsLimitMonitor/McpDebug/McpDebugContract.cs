@@ -73,13 +73,20 @@ public static class McpDebugContract
                 Prop("serviceId", "string", "Service ID; defaults to the first service."),
             ]
         ),
+        Tool(
+            "open_stock_window",
+            "Open a provider inventory page in a new embedded browser window.",
+            [Prop("provider", "string", "NovixLink or HostYun; defaults to NovixLink.")]
+        ),
         Tool("get_browser_windows", "List embedded browser windows opened by account sessions."),
         Tool(
             "set_settings",
-            "Change polling and traffic alert settings.",
+            "Change polling, alert, and provider stock-monitor settings.",
             [
                 Prop("pollIntervalMinutes", "number", "Polling interval in minutes."),
                 Prop("alertRemainingPercent", "number", "Remaining-traffic alert threshold."),
+                Prop("novixLinkStockEnabled", "boolean", "Enable NovixLink Basic stock monitoring."),
+                Prop("hostYunStockEnabled", "boolean", "Enable HostYun plan B stock monitoring."),
             ]
         ),
         Tool("get_alerts", "Get recent toast alert records."),
@@ -112,11 +119,18 @@ public static class McpDebugContract
             "List cookies for an account site.",
             [Prop("account", "string", "Account name; defaults to the first account.")]
         ),
-        Tool("check_stock", "Run a stock check immediately."),
+        Tool(
+            "check_stock",
+            "Run stock checks immediately.",
+            [Prop("provider", "string", "NovixLink or HostYun; defaults to all providers.")]
+        ),
         Tool(
             "simulate_stock",
-            "Mark a plan as in stock until clear_simulation.",
-            [Prop("plan", "string", "Plan-name substring; defaults to the first plan.")]
+            "Mark a provider plan as in stock until clear_simulation.",
+            [
+                Prop("provider", "string", "NovixLink or HostYun; defaults to NovixLink."),
+                Prop("plan", "string", "Plan-name substring; defaults to the provider target."),
+            ]
         ),
         Tool(
             "fetch_url",

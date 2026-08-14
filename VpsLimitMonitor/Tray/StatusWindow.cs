@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using VpsLimitMonitor.Core;
@@ -122,24 +123,11 @@ public class StatusWindow : Window
         );
         root.Children.Add(topBar);
 
-        var stockEnabled = Settings.SettingsManager.Settings.StockMonitorEnabled;
         const double columnSpacing = 16;
         var columnWidth = ServiceCardWidth + columnSpacing;
 
-        if (stockEnabled)
-        {
-            var stockSection = BuildStockSection();
-            stockSection.MaxWidth = Math.Max(
-                ServiceCardWidth,
-                _controller.Accounts.Count * columnWidth
-            );
-            stockSection.HorizontalAlignment = HorizontalAlignment.Left;
-            root.Children.Add(stockSection);
-        }
-
         root.Measure(Size.Infinity);
         var accountColumnsMaxHeight = Math.Max(160, maxHeight - root.DesiredSize.Height - 32);
-        var serviceColumnsMaxHeight = Math.Max(100, accountColumnsMaxHeight - 42);
         var accountsPanel = new StackPanel
         {
             Name = "AccountColumns",
@@ -172,7 +160,6 @@ public class StatusWindow : Window
                 Name = $"AccountColumn{accountIndex}",
                 Orientation = Orientation.Vertical,
                 ItemWidth = columnWidth,
-                MaxHeight = serviceColumnsMaxHeight,
             };
             var header = new DockPanel
             {
@@ -205,6 +192,14 @@ public class StatusWindow : Window
             }
 
             accountGroup.Children.Add(header);
+            if (BuildStockSection(account) is { } stockSection)
+                accountGroup.Children.Add(stockSection);
+
+            accountGroup.Measure(Size.Infinity);
+            serviceColumns.MaxHeight = Math.Max(
+                100,
+                accountColumnsMaxHeight - accountGroup.DesiredSize.Height - accountGroup.Spacing
+            );
 
             if (!account.LoggedIn)
             {
@@ -259,62 +254,104 @@ public class StatusWindow : Window
         };
     }
 
-    /// <summary>库存区：标题行带检查时间，套餐按固定格宽（半张卡片）对齐排布，窄窗口两列、宽窗口一行。</summary>
-    private Control BuildStockSection()
+    /// <summary>供应商库存目标与独立开关，显示在对应供应商标题下方。</summary>
+    private Control? BuildStockSection(AccountState account)
     {
         var stock = _controller.Stock;
-        var panel = new StackPanel { Spacing = 3 };
+        var source = stock.FindSource(account);
+        if (source == null)
+            return null;
 
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        var title = "库存监控";
-        if (stock.Simulated)
-            title += "（模拟数据）";
-        header.Children.Add(new TextBlock { Text = title, FontWeight = FontWeight.Bold });
-        if (stock.LastCheck is { } check)
-            header.Children.Add(
-                new TextBlock
-                {
-                    Text = $"检查于 {check:HH:mm:ss}",
-                    FontSize = 12,
-                    Opacity = 0.6,
-                    VerticalAlignment = VerticalAlignment.Center,
-                }
-            );
+        var enabled = stock.IsEnabled(source);
+        var panel = new StackPanel
+        {
+            Name = $"StockMonitor{source.ProviderName}",
+            MinWidth = ServiceCardWidth,
+            Margin = new Thickness(0, 0, 16, 0),
+            Spacing = 3,
+        };
+        var header = new DockPanel();
+        var toggle = new CheckBox
+        {
+            Name = $"StockToggle{source.ProviderName}",
+            Content = $"监控 {source.TargetName} 库存",
+            IsChecked = enabled,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        toggle.Click += (_, _) =>
+            _controller.SetStockMonitorEnabled(source.ProviderName, toggle.IsChecked == true);
+        header.Children.Add(toggle);
+
+        if (source.LastCheck is { } check)
+        {
+            var checkedAt = new TextBlock
+            {
+                Text = $"{check:HH:mm:ss}",
+                FontSize = 12,
+                Opacity = 0.6,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            DockPanel.SetDock(checkedAt, Dock.Right);
+            header.Children.Insert(0, checkedAt);
+        }
         panel.Children.Add(header);
 
-        if (stock.Error != null)
+        if (!enabled)
+        {
+            panel.Children.Add(new TextBlock { Text = "已关闭", Opacity = 0.6 });
+        }
+        else if (source.Checking)
+        {
+            panel.Children.Add(new TextBlock { Text = "检查中…", Opacity = 0.6 });
+        }
+        else if (source.Error != null)
         {
             panel.Children.Add(
                 new TextBlock
                 {
-                    Text = $"检查失败：{stock.Error}",
+                    Text = $"检查失败：{source.Error}",
                     Foreground = Brushes.OrangeRed,
                     TextWrapping = TextWrapping.Wrap,
                 }
             );
         }
-        else if (stock.Plans.Count == 0)
+        else if (source.Plans.Count == 0)
         {
             panel.Children.Add(new TextBlock { Text = "等待检查…", Opacity = 0.6 });
         }
         else
         {
-            var wrap = new WrapPanel { ItemWidth = ServiceCardWidth / 2 };
-            foreach (var plan in stock.Plans)
+            foreach (var plan in source.Plans)
             {
+                var suffix = source.Simulated ? "（模拟数据）" : "";
                 var item = new TextBlock
                 {
-                    Text = $"{plan.Name} {(plan.InStock ? "有货！" : "售罄")}",
+                    Text = $"{plan.Name}：{(plan.InStock ? "有货" : "售罄")}{suffix}",
                     Opacity = plan.InStock ? 1 : 0.6,
+                    TextDecorations = TextDecorations.Underline,
+                    TextWrapping = TextWrapping.Wrap,
                 };
                 if (plan.InStock)
                 {
                     item.Foreground = Brushes.Green;
                     item.FontWeight = FontWeight.Bold;
                 }
-                wrap.Children.Add(item);
+                var link = new Button
+                {
+                    Name = $"StockLink{source.ProviderName}",
+                    Content = item,
+                    Background = Brushes.Transparent,
+                    BorderBrush = Brushes.Transparent,
+                    Padding = new Thickness(0),
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    IsTabStop = false,
+                };
+                link.Click += (_, _) =>
+                    _ = _controller.OpenStockPageAsync(source.ProviderName);
+                panel.Children.Add(link);
             }
-            panel.Children.Add(wrap);
         }
 
         return panel;

@@ -295,7 +295,7 @@ public static class McpDebugServer
                     foreach (var svc in acc.Services)
                         svc.Simulated = false;
                 }
-                _controller.Stock.Simulated = false;
+                _controller.Stock.ClearSimulation();
                 _controller.TriggerRefresh();
                 _controller.Stock.TriggerCheck();
                 return "Simulation cleared, refresh triggered";
@@ -332,6 +332,26 @@ public static class McpDebugServer
                     return JsonSerializer.Serialize(account.Session.BrowserWindows, PrettyJson);
                 }
 
+            case "open_stock_window":
+                {
+                    var providerName =
+                        args?["provider"]?.GetValue<string>()
+                        ?? StockMonitor.NovixLinkProviderName;
+                    await _controller.OpenStockPageAsync(providerName);
+                    var source = _controller.Stock.FindSource(providerName)
+                        ?? throw new InvalidOperationException(
+                            $"Stock provider not found: {providerName}"
+                        );
+                    var account = _controller.Accounts.First(account =>
+                        string.Equals(
+                            account.Config.Type,
+                            source.ProviderType,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    );
+                    return JsonSerializer.Serialize(account.Session.BrowserWindows, PrettyJson);
+                }
+
             case "get_browser_windows":
                 return JsonSerializer.Serialize(
                     _controller.Accounts.ToDictionary(a => a.Config.Name, a => a.Session.BrowserWindows),
@@ -340,11 +360,28 @@ public static class McpDebugServer
 
             case "set_settings":
                 {
+                    var stockSettingsChanged = false;
                     if (args?["pollIntervalMinutes"]?.GetValue<double>() is { } interval)
                         SettingsManager.Settings.PollIntervalMinutes = (int)interval;
                     if (args?["alertRemainingPercent"]?.GetValue<double>() is { } threshold)
                         SettingsManager.Settings.AlertRemainingPercent = threshold;
+                    if (args?["novixLinkStockEnabled"]?.GetValue<bool>() is { } novixEnabled)
+                    {
+                        SettingsManager.Settings.StockMonitorEnabled = novixEnabled;
+                        stockSettingsChanged = true;
+                    }
+                    if (args?["hostYunStockEnabled"]?.GetValue<bool>() is { } hostYunEnabled)
+                    {
+                        SettingsManager.Settings.HostYunStockMonitorEnabled = hostYunEnabled;
+                        stockSettingsChanged = true;
+                    }
                     SettingsManager.Save();
+                    if (stockSettingsChanged)
+                    {
+                        _controller.Stock.TriggerCheck();
+                        _controller.Tray.UpdateStockChecks();
+                        _controller.RebuildStatusWindow();
+                    }
                     return JsonSerializer.Serialize(SettingsManager.Settings);
                 }
 
@@ -409,30 +446,37 @@ public static class McpDebugServer
                 }
 
             case "check_stock":
-                await _controller.Stock.CheckAsync();
+                await _controller.Stock.CheckAsync(args?["provider"]?.GetValue<string>());
                 return BuildStockJson();
 
             case "simulate_stock":
                 {
                     var stock = _controller.Stock;
-                    if (stock.Plans.Count == 0)
-                        await stock.CheckAsync();
-                    if (stock.Plans.Count == 0)
-                        stock.Plans.Add(new StockPlan("模拟套餐", false));
+                    var providerName =
+                        args?["provider"]?.GetValue<string>()
+                        ?? StockMonitor.NovixLinkProviderName;
+                    var source = stock.FindSource(providerName)
+                        ?? throw new InvalidOperationException(
+                            $"Stock provider not found: {providerName}"
+                        );
+                    if (source.Plans.Count == 0)
+                        await stock.CheckAsync(source.ProviderName);
+                    if (source.Plans.Count == 0)
+                        source.Plans.Add(new StockPlan(source.TargetName, false));
 
                     var planName = args?["plan"]?.GetValue<string>();
                     var plan =
                         (planName != null
-                            ? stock.Plans.FirstOrDefault(p =>
+                            ? source.Plans.FirstOrDefault(p =>
                                 p.Name.Contains(planName, StringComparison.OrdinalIgnoreCase)
                             )
-                            : stock.Plans.FirstOrDefault())
+                            : source.Plans.FirstOrDefault())
                         ?? throw new InvalidOperationException($"Plan not found: {planName}");
 
-                    stock.Simulated = true;
+                    source.Simulated = true;
                     plan.InStock = true;
                     plan.Alerted = false;
-                    stock.EvaluateAlerts();
+                    stock.EvaluateAlerts(source);
                     _controller.RebuildStatusWindow();
                     return BuildStockJson();
                 }
@@ -494,18 +538,25 @@ public static class McpDebugServer
         return JsonSerializer.Serialize(
             new
             {
-                enabled = SettingsManager.Settings.StockMonitorEnabled,
-                url = SettingsManager.Settings.StockMonitorUrl,
                 intervalMinutes = SettingsManager.Settings.StockMonitorIntervalMinutes,
-                lastCheck = stock.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
-                error = stock.Error,
-                simulated = stock.Simulated,
                 anyInStock = stock.AnyInStock,
-                plans = stock.Plans.Select(p => new
+                sources = stock.Sources.Select(source => new
                 {
-                    name = p.Name,
-                    inStock = p.InStock,
-                    alerted = p.Alerted,
+                    provider = source.ProviderName,
+                    target = source.TargetName,
+                    enabled = stock.IsEnabled(source),
+                    url = stock.GetUrl(source),
+                    lastCheck = source.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
+                    error = source.Error,
+                    simulated = source.Simulated,
+                    checking = source.Checking,
+                    anyInStock = source.AnyInStock,
+                    plans = source.Plans.Select(plan => new
+                    {
+                        name = plan.Name,
+                        inStock = plan.InStock,
+                        alerted = plan.Alerted,
+                    }),
                 }),
             },
             PrettyJson
@@ -559,14 +610,19 @@ public static class McpDebugServer
             }),
             stock = new
             {
-                enabled = SettingsManager.Settings.StockMonitorEnabled,
-                lastCheck = _controller.Stock.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
-                error = _controller.Stock.Error,
-                simulated = _controller.Stock.Simulated,
-                plans = _controller.Stock.Plans.Select(p => new
+                sources = _controller.Stock.Sources.Select(source => new
                 {
-                    name = p.Name,
-                    inStock = p.InStock,
+                    provider = source.ProviderName,
+                    target = source.TargetName,
+                    enabled = _controller.Stock.IsEnabled(source),
+                    lastCheck = source.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
+                    error = source.Error,
+                    simulated = source.Simulated,
+                    plans = source.Plans.Select(plan => new
+                    {
+                        name = plan.Name,
+                        inStock = plan.InStock,
+                    }),
                 }),
             },
             recentAlerts = _controller.Alerts.RecentAlerts.TakeLast(10),

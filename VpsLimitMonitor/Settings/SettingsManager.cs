@@ -148,6 +148,33 @@ public static class SettingsManager
         {
             settings.StockMonitorUrl = AppSettings.DefaultStockMonitorUrl;
         }
+        settings.HostYunStockMonitorUrl = settings.HostYunStockMonitorUrl?.Trim() ?? "";
+        if (
+            string.Equals(
+                settings.HostYunStockMonitorUrl,
+                "https://my.hostyun.com/?c=order&ptype=6",
+                StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                settings.HostYunStockMonitorUrl,
+                "https://my.hostyun.com/?c=order&ptype=6&pid=186",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            settings.HostYunStockMonitorUrl = AppSettings.DefaultHostYunStockMonitorUrl;
+        }
+        if (
+            !Uri.TryCreate(
+                settings.HostYunStockMonitorUrl,
+                UriKind.Absolute,
+                out var hostYunStockUri
+            )
+            || hostYunStockUri.Scheme is not ("http" or "https")
+        )
+        {
+            settings.HostYunStockMonitorUrl = AppSettings.DefaultHostYunStockMonitorUrl;
+        }
         if (settings.Theme is not ("System" or "Light" or "Dark"))
             settings.Theme = "System";
         if (settings.UpdateCheckInterval is not ("Every6Hours" or "Daily" or "Weekly" or "None"))

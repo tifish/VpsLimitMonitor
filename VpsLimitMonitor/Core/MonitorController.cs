@@ -252,6 +252,25 @@ public class MonitorController
         );
     }
 
+    public async Task OpenStockPageAsync(string providerName)
+    {
+        var source = Stock.FindSource(providerName)
+            ?? throw new InvalidOperationException($"Stock provider not found: {providerName}");
+        var account = Accounts.FirstOrDefault(account =>
+                string.Equals(
+                    account.Config.Type,
+                    source.ProviderType,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            ?? throw new InvalidOperationException($"Account not found: {source.ProviderName}");
+
+        await account.Session.OpenNewWindowAsync(
+            Stock.GetUrl(source),
+            $"{source.TargetName} 库存 - {source.ProviderName}"
+        );
+    }
+
     private async Task OnLoginWindowNavigatedAsync(AccountState account)
     {
         // 登录窗口里每次页面跳转都探测一次：登录成功后无需等窗口关闭即恢复状态
@@ -341,9 +360,23 @@ public class MonitorController
         Tray.UpdateThemeChecks();
     }
 
-    public void SetStockMonitorEnabled(bool enabled)
+    public void SetStockMonitorEnabled(string providerName, bool enabled)
     {
-        SettingsManager.Settings.StockMonitorEnabled = enabled;
+        switch (providerName)
+        {
+            case StockMonitor.NovixLinkProviderName:
+                SettingsManager.Settings.StockMonitorEnabled = enabled;
+                break;
+            case StockMonitor.HostYunProviderName:
+                SettingsManager.Settings.HostYunStockMonitorEnabled = enabled;
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unknown stock provider: {providerName}",
+                    nameof(providerName)
+                );
+        }
+
         SettingsManager.Save();
         Tray.UpdateStockChecks();
         if (enabled)

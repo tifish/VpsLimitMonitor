@@ -11,6 +11,8 @@ public class AppSettings
 {
     public const string DefaultStockMonitorUrl =
         "https://novixlink.com/store/us-lacup-isp";
+    public const string DefaultHostYunStockMonitorUrl =
+        "https://my.hostyun.com/?c=order&ptype=6&pg=42";
 
     public List<AccountConfig> Accounts { get; set; } = [];
     public int BuiltInAccountsVersion { get; set; }
@@ -20,5 +22,7 @@ public class AppSettings
     public string UpdateCheckInterval { get; set; } = "Daily"; // Every6Hours | Daily | Weekly | None
     public bool StockMonitorEnabled { get; set; } = true;
     public string StockMonitorUrl { get; set; } = DefaultStockMonitorUrl;
+    public bool HostYunStockMonitorEnabled { get; set; } = true;
+    public string HostYunStockMonitorUrl { get; set; } = DefaultHostYunStockMonitorUrl;
     public int StockMonitorIntervalMinutes { get; set; } = 10;
 }

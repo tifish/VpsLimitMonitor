@@ -10,7 +10,12 @@ using ZLogger;
 namespace VpsLimitMonitor.Web;
 
 public record FetchResult(int Status, string Url, string Body);
-public record BrowserWindowInfo(string Title, string Url, bool IsVisible);
+public record BrowserWindowInfo(
+    string Title,
+    string RequestedUrl,
+    string Url,
+    bool IsVisible
+);
 
 /// <summary>
 ///     基于 WebView2 的站点会话。所有账号共用默认 Profile（数据目录固定在
@@ -45,7 +50,14 @@ public class WebSession(string baseUrl, string accountName)
 
     public IReadOnlyList<BrowserWindowInfo> BrowserWindows =>
         _browserWindows
-            .Select(w => new BrowserWindowInfo(w.Window.Title ?? "", w.Url, w.Window.IsVisible))
+            .Select(w =>
+                new BrowserWindowInfo(
+                    w.Window.Title ?? "",
+                    w.RequestedUrl,
+                    w.Controller.CoreWebView2.Source,
+                    w.Window.IsVisible
+                )
+            )
             .ToArray();
 
     public Task EnsureInitializedAsync()
@@ -342,5 +354,9 @@ public class WebSession(string baseUrl, string accountName)
         );
     }
 
-    private sealed record BrowserWindowHost(Window Window, CoreWebView2Controller Controller, string Url);
+    private sealed record BrowserWindowHost(
+        Window Window,
+        CoreWebView2Controller Controller,
+        string RequestedUrl
+    );
 }

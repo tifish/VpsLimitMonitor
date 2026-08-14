@@ -38,7 +38,8 @@ public class TrayIconManager
     private readonly NativeMenuItem _storageDefaultItem;
     private readonly NativeMenuItem _storagePortableItem;
     private readonly NativeMenuItem _storageCustomItem;
-    private readonly NativeMenuItem _stockMonitorItem;
+    private readonly NativeMenuItem _novixLinkStockMonitorItem;
+    private readonly NativeMenuItem _hostYunStockMonitorItem;
 
     public TrayIconManager(MonitorController controller)
     {
@@ -86,14 +87,18 @@ public class TrayIconManager
         var refreshItem = new NativeMenuItem("立即刷新");
         refreshItem.Click += (_, _) => _controller.TriggerRefresh();
 
-        _stockMonitorItem = new NativeMenuItem("监控库存放货")
+        _novixLinkStockMonitorItem = CreateStockMonitorItem(
+            "NovixLink Basic",
+            StockMonitor.NovixLinkProviderName
+        );
+        _hostYunStockMonitorItem = CreateStockMonitorItem(
+            "HostYun 套餐 B",
+            StockMonitor.HostYunProviderName
+        );
+        var stockMenu = new NativeMenuItem("库存监控")
         {
-            ToggleType = MenuItemToggleType.CheckBox,
+            Menu = [_novixLinkStockMonitorItem, _hostYunStockMonitorItem],
         };
-        _stockMonitorItem.Click += (_, _) =>
-            _controller.SetStockMonitorEnabled(
-                !SettingsManager.Settings.StockMonitorEnabled
-            );
 
         var statusItem = new NativeMenuItem("状态面板");
         statusItem.Click += (_, _) => _controller.ToggleStatusWindow();
@@ -110,7 +115,7 @@ public class TrayIconManager
         var menu = new NativeMenu();
         menu.Items.Add(statusItem);
         menu.Items.Add(refreshItem);
-        menu.Items.Add(_stockMonitorItem);
+        menu.Items.Add(stockMenu);
         menu.Items.Add(new NativeMenuItemSeparator());
 
         foreach (var account in _controller.Accounts)
@@ -145,7 +150,21 @@ public class TrayIconManager
 
     public void UpdateStockChecks()
     {
-        _stockMonitorItem.IsChecked = SettingsManager.Settings.StockMonitorEnabled;
+        _novixLinkStockMonitorItem.IsChecked = SettingsManager.Settings.StockMonitorEnabled;
+        _hostYunStockMonitorItem.IsChecked =
+            SettingsManager.Settings.HostYunStockMonitorEnabled;
+    }
+
+    private NativeMenuItem CreateStockMonitorItem(string header, string providerName)
+    {
+        var item = new NativeMenuItem(header) { ToggleType = MenuItemToggleType.CheckBox };
+        item.Click += (_, _) =>
+        {
+            var source = _controller.Stock.FindSource(providerName);
+            if (source != null)
+                _controller.SetStockMonitorEnabled(providerName, !_controller.Stock.IsEnabled(source));
+        };
+        return item;
     }
 
     private NativeMenuItem CreateStorageItem(string header, StorageLocation location)
