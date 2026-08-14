@@ -300,6 +300,17 @@ public class StatusWindow : Window
         {
             panel.Children.Add(new TextBlock { Text = "已关闭", Opacity = 0.6 });
         }
+        else if (!account.LoggedIn)
+        {
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Name = $"StockStatus{source.ProviderName}",
+                    Text = "登录已失效",
+                    Foreground = Brushes.OrangeRed,
+                }
+            );
+        }
         else if (source.Checking)
         {
             panel.Children.Add(new TextBlock { Text = "检查中…", Opacity = 0.6 });

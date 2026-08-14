@@ -296,6 +296,7 @@ public class MonitorController
         if (await RefreshAccountAsync(account))
         {
             LastRefresh = DateTime.Now;
+            Stock.TriggerCheck();
             account.Session.HideLoginWindow();
             Alerts.ShowToast("VPS 流量监视", $"{account.Config.Name} 登录成功，已恢复监控");
         }
@@ -306,7 +307,10 @@ public class MonitorController
     {
         // 用户关掉登录窗口后立即重试抓取
         if (await RefreshAccountAsync(account))
+        {
             LastRefresh = DateTime.Now;
+            Stock.TriggerCheck();
+        }
         NotifyUi();
     }
 

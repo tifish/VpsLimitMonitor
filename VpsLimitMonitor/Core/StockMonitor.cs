@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using JeekTools;
 using Microsoft.Extensions.Logging;
+using VpsLimitMonitor.Providers;
 using VpsLimitMonitor.Settings;
 using ZLogger;
 
@@ -180,6 +181,17 @@ public class StockMonitor(MonitorController controller)
             source.Error = null;
             EvaluateAlerts(source);
         }
+        catch (SessionExpiredException)
+        {
+            source.Error = null;
+            if (FindAccount(source) is { } account)
+            {
+                account.LoggedIn = false;
+                controller.Alerts.NotifyLoginNeeded(account);
+                controller.Tray.Update();
+            }
+            Log.ZLogWarning($"{source.ProviderName} stock check: session expired");
+        }
         catch (Exception ex)
         {
             source.Error = ex.Message;
@@ -196,9 +208,7 @@ public class StockMonitor(MonitorController controller)
         StockSourceState source
     )
     {
-        var account = controller.Accounts.FirstOrDefault(account =>
-                string.Equals(account.Config.Type, source.ProviderType, StringComparison.OrdinalIgnoreCase)
-            )
+        var account = FindAccount(source)
             ?? throw new InvalidOperationException("未找到 HostYun 账号");
         await account.Session.EnsureInitializedAsync();
 
@@ -210,8 +220,13 @@ public class StockMonitor(MonitorController controller)
         var response = await account.Session.FetchAsync(productUrl);
         if (response.Status is < 200 or >= 300)
             throw new InvalidOperationException($"HostYun HTTP {response.Status}");
-        if (response.Url.Contains("page.aspx?c=login", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("HostYun 登录已失效");
+        if (
+            response.Url.Contains("page.aspx?c=login", StringComparison.OrdinalIgnoreCase)
+            || response.Body.Contains("page.aspx?c=login", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            throw new SessionExpiredException();
+        }
 
         using var document = JsonDocument.Parse(response.Body);
         foreach (var product in document.RootElement.EnumerateArray())
@@ -238,6 +253,15 @@ public class StockMonitor(MonitorController controller)
 
         return [];
     }
+
+    private AccountState? FindAccount(StockSourceState source) =>
+        controller.Accounts.FirstOrDefault(account =>
+            string.Equals(
+                account.Config.Type,
+                source.ProviderType,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
 
     private async Task<string> FetchPageAsync(string url)
     {
