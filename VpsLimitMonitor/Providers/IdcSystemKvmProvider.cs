@@ -64,7 +64,13 @@ public partial class IdcSystemKvmProvider(WebSession session) : IVpsProvider
     private async Task<List<JsonElement>?> FetchServiceRowsAsync()
     {
         var script = """
-            fetch("/idcsystem.aspx?c=myservice", { credentials: "include", redirect: "follow" })
+            // The panel defaults to the user's last page size, which can leave the
+            // monitor with only the first ten services. Request the largest supported
+            // page explicitly so the parsed DOM contains the complete service list.
+            fetch("/idcsystem.aspx?c=myservice&pagesize=100", {
+                credentials: "include",
+                redirect: "follow"
+            })
                 .then(function (r) { return r.text().then(function (t) { return { url: r.url, html: t }; }); })
                 .then(function (res) {
                     var doc = new DOMParser().parseFromString(res.html, "text/html");
