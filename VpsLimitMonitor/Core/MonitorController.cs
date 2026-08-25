@@ -299,10 +299,23 @@ public class MonitorController
 
     public async Task OpenServiceAsync(AccountState account, VpsService service)
     {
-        await account.Session.OpenNewWindowAsync(
-            account.Provider.GetServiceUrl(service),
-            $"{service.Label} - {account.Config.Name}"
-        );
+        var preserveStatusWindow = _statusWindow?.IsVisible == true;
+        if (preserveStatusWindow)
+            _statusWindow!.PreserveOnNextDeactivate();
+
+        try
+        {
+            await account.Session.OpenNewWindowAsync(
+                account.Provider.GetServiceUrl(service),
+                $"{service.Label} - {account.Config.Name}"
+            );
+        }
+        catch
+        {
+            if (preserveStatusWindow)
+                _statusWindow!.CancelPreserveOnNextDeactivate();
+            throw;
+        }
     }
 
     public async Task OpenStockPageAsync(string providerName)
@@ -384,6 +397,8 @@ public class MonitorController
     {
         _statusWindow?.Rebuild();
     }
+
+    public bool StatusWindowVisible => _statusWindow?.IsVisible == true;
 
     private void OnSettingsReloaded()
     {

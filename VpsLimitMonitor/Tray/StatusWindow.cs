@@ -13,6 +13,7 @@ namespace VpsLimitMonitor.Tray;
 public class StatusWindow : Window
 {
     private readonly MonitorController _controller;
+    private bool _preserveOnNextDeactivate;
 
     public StatusWindow(MonitorController controller)
     {
@@ -27,7 +28,16 @@ public class StatusWindow : Window
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        Deactivated += (_, _) => Hide();
+        Deactivated += (_, _) =>
+        {
+            if (_preserveOnNextDeactivate)
+            {
+                _preserveOnNextDeactivate = false;
+                return;
+            }
+
+            Hide();
+        };
         // 数据刷新会改变面板高度，重新贴底定位，避免底部伸到任务栏下面
         SizeChanged += (_, _) =>
         {
@@ -47,6 +57,10 @@ public class StatusWindow : Window
         Activate();
         PositionNearTray();
     }
+
+    public void PreserveOnNextDeactivate() => _preserveOnNextDeactivate = true;
+
+    public void CancelPreserveOnNextDeactivate() => _preserveOnNextDeactivate = false;
 
     /// <summary>定位到主屏工作区右下角（托盘附近）。</summary>
     private void PositionNearTray()
