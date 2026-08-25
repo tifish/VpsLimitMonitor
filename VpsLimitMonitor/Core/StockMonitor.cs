@@ -29,6 +29,8 @@ public class StockSourceState(string providerName, string providerType, string t
     public string? Error { get; set; }
     public bool Simulated { get; set; }
     public bool Checking { get; set; }
+    public DateTimeOffset? CheckStartedAt { get; set; }
+    public DateTimeOffset? CheckCompletedAt { get; set; }
     public bool AnyInStock => Plans.Any(plan => plan.InStock);
 }
 
@@ -134,11 +136,11 @@ public class StockMonitor(MonitorController controller)
                     ),
             ];
 
-        foreach (var source in sources)
-        {
-            if (!enabledOnly || IsEnabled(source))
-                await CheckSourceAsync(source);
-        }
+        var checks = sources
+            .Where(source => !enabledOnly || IsEnabled(source))
+            .Select(CheckSourceAsync)
+            .ToArray();
+        await Task.WhenAll(checks);
     }
 
     private async Task CheckSourceAsync(StockSourceState source)
@@ -147,6 +149,8 @@ public class StockMonitor(MonitorController controller)
             return;
 
         source.Checking = true;
+        source.CheckStartedAt = DateTimeOffset.Now;
+        source.CheckCompletedAt = null;
         try
         {
             List<(string Name, bool InStock)> parsed;
@@ -199,6 +203,7 @@ public class StockMonitor(MonitorController controller)
         }
         finally
         {
+            source.CheckCompletedAt = DateTimeOffset.Now;
             source.Checking = false;
             controller.RebuildStatusWindow();
         }

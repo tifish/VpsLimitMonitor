@@ -38,3 +38,17 @@ public class AccountState(AccountConfig config, WebSession session, IVpsProvider
     public DateTime? LastPoll { get; set; }
     public string? Error { get; set; }
 }
+
+public class SupplierRefreshState(
+    string supplier,
+    string site,
+    IReadOnlyList<string> accounts
+)
+{
+    public string Supplier { get; } = supplier;
+    public string Site { get; } = site;
+    public IReadOnlyList<string> Accounts { get; } = accounts;
+    public DateTimeOffset StartedAt { get; } = DateTimeOffset.Now;
+    public DateTimeOffset? CompletedAt { get; set; }
+    public bool? AnyRefreshed { get; set; }
+}

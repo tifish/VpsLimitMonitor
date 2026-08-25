@@ -28,6 +28,9 @@ public class MonitorController
     public bool Refreshing { get; private set; }
     public int ServerCount => Accounts.Sum(account => account.Services.Count);
     public string ServerCountText => $"服务器总数：{ServerCount}";
+    public List<SupplierRefreshState> LastSupplierRefreshes { get; } = [];
+    public int ActiveSupplierRefreshes { get; private set; }
+    public int MaxConcurrentSupplierRefreshes { get; private set; }
 
     private StatusWindow? _statusWindow;
     private CancellationTokenSource _pollDelayCts = new();
@@ -97,9 +100,21 @@ public class MonitorController
         await NotifyUiAsync();
         try
         {
-            var anyRefreshed = false;
-            foreach (var account in Accounts)
-                anyRefreshed |= await RefreshAccountAsync(account);
+            LastSupplierRefreshes.Clear();
+            ActiveSupplierRefreshes = 0;
+            MaxConcurrentSupplierRefreshes = 0;
+
+            var supplierGroups = Accounts
+                .GroupBy(
+                    account => GetSupplierSite(account.Config.BaseUrl),
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .Select(group => group.ToArray())
+                .ToArray();
+            var refreshTasks = supplierGroups
+                .Select(RefreshSupplierAsync)
+                .ToArray();
+            var anyRefreshed = (await Task.WhenAll(refreshTasks)).Any(refreshed => refreshed);
 
             // 全部账号都没刷到数据（如会话失效）时不更新时间，避免误导
             if (anyRefreshed)
@@ -110,6 +125,44 @@ public class MonitorController
             Refreshing = false;
             await NotifyUiAsync();
         }
+    }
+
+    private async Task<bool> RefreshSupplierAsync(AccountState[] accounts)
+    {
+        var state = new SupplierRefreshState(
+            accounts[0].Config.Name,
+            GetSupplierSite(accounts[0].Config.BaseUrl),
+            accounts.Select(account => account.Config.Name).ToArray()
+        );
+        LastSupplierRefreshes.Add(state);
+        ActiveSupplierRefreshes++;
+        MaxConcurrentSupplierRefreshes = Math.Max(
+            MaxConcurrentSupplierRefreshes,
+            ActiveSupplierRefreshes
+        );
+
+        try
+        {
+            var anyRefreshed = false;
+            foreach (var account in accounts)
+                anyRefreshed |= await RefreshAccountAsync(account);
+
+            state.AnyRefreshed = anyRefreshed;
+            return anyRefreshed;
+        }
+        finally
+        {
+            state.CompletedAt = DateTimeOffset.Now;
+            ActiveSupplierRefreshes--;
+        }
+    }
+
+    private static string GetSupplierSite(string baseUrl)
+    {
+        if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+            return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+
+        return baseUrl.TrimEnd('/');
     }
 
     /// <summary>刷新单个账号，返回是否真正取到了数据。</summary>

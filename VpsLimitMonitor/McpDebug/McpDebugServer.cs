@@ -550,6 +550,8 @@ public static class McpDebugServer
                     error = source.Error,
                     simulated = source.Simulated,
                     checking = source.Checking,
+                    checkStartedAt = source.CheckStartedAt?.ToString("O"),
+                    checkCompletedAt = source.CheckCompletedAt?.ToString("O"),
                     anyInStock = source.AnyInStock,
                     plans = source.Plans.Select(plan => new
                     {
@@ -569,6 +571,20 @@ public static class McpDebugServer
         {
             lastRefresh = _controller.LastRefresh?.ToString("yyyy-MM-dd HH:mm:ss"),
             refreshing = _controller.Refreshing,
+            refreshDiagnostics = new
+            {
+                activeSuppliers = _controller.ActiveSupplierRefreshes,
+                maxConcurrentSuppliers = _controller.MaxConcurrentSupplierRefreshes,
+                suppliers = _controller.LastSupplierRefreshes.Select(refresh => new
+                {
+                    supplier = refresh.Supplier,
+                    site = refresh.Site,
+                    accounts = refresh.Accounts,
+                    startedAt = refresh.StartedAt.ToString("O"),
+                    completedAt = refresh.CompletedAt?.ToString("O"),
+                    anyRefreshed = refresh.AnyRefreshed,
+                }),
+            },
             serverCount = _controller.ServerCount,
             serverCountText = _controller.ServerCountText,
             tray = new
@@ -620,6 +636,9 @@ public static class McpDebugServer
                     lastCheck = source.LastCheck?.ToString("yyyy-MM-dd HH:mm:ss"),
                     error = source.Error,
                     simulated = source.Simulated,
+                    checking = source.Checking,
+                    checkStartedAt = source.CheckStartedAt?.ToString("O"),
+                    checkCompletedAt = source.CheckCompletedAt?.ToString("O"),
                     plans = source.Plans.Select(plan => new
                     {
                         name = plan.Name,
