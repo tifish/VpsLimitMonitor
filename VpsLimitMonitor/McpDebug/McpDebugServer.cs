@@ -582,6 +582,8 @@ public static class McpDebugServer
             accounts = _controller.Accounts.Select(a => new
             {
                 name = a.Config.Name,
+                titleText = a.TitleText,
+                serverCount = a.ServerCount,
                 baseUrl = a.Config.BaseUrl,
                 loggedIn = a.LoggedIn,
                 simulateExpired = a.SimulateExpired,

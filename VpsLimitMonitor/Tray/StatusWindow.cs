@@ -172,7 +172,7 @@ public class StatusWindow : Window
             header.Children.Add(
                 new TextBlock
                 {
-                    Text = account.Config.Name,
+                    Text = account.TitleText,
                     FontSize = 18,
                     FontWeight = FontWeight.Bold,
                     VerticalAlignment = VerticalAlignment.Center,

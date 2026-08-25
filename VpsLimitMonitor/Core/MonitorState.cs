@@ -25,6 +25,8 @@ public class AccountState(AccountConfig config, WebSession session, IVpsProvider
     public WebSession Session { get; } = session;
     public IVpsProvider Provider { get; } = provider;
     public List<ServiceState> Services { get; } = [];
+    public int ServerCount => Services.Count;
+    public string TitleText => $"{Config.Name}（{ServerCount}）";
     public bool LoggedIn { get; set; } = true;
     public bool LoginNotified { get; set; }
 
