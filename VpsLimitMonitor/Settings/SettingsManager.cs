@@ -52,6 +52,7 @@ public static class SettingsManager
         if (EnsureBuiltInAccounts())
             Save();
 
+        ServerNumberStore.Initialize(RoamingConfigDir, Settings.Accounts);
         StartWatcher();
         Log.ZLogInformation($"Settings loaded from {RoamingConfigDir} (location: {Location})");
     }
@@ -104,6 +105,7 @@ public static class SettingsManager
             Load();
             if (EnsureBuiltInAccounts())
                 Save();
+            ServerNumberStore.Initialize(RoamingConfigDir, Settings.Accounts);
 
             Log.ZLogInformation(
                 $"Storage switched to {location} at {newConfigDir} (moved: {moveFiles})"
@@ -315,6 +317,7 @@ public static class SettingsManager
             Settings = settings;
             _baseline = JsonSettingsFile.Clone(settings);
             _lastSavedJson = json;
+            ServerNumberStore.Initialize(RoamingConfigDir, Settings.Accounts);
             Log.ZLogInformation($"Settings reloaded from external change");
             Avalonia.Threading.Dispatcher.UIThread.Post(() => SettingsReloaded?.Invoke());
         }

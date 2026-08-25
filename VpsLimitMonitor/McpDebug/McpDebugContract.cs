@@ -17,6 +17,15 @@ public static class McpDebugContract
     public static IReadOnlyList<McpDebugTool> AppTools { get; } =
     [
         Tool("get_status", "Get accounts, services, traffic, alerts, and settings."),
+        Tool(
+            "set_service_number",
+            "Set or clear a persisted two-digit status-panel server number.",
+            [
+                Prop("account", "string", "Account name; defaults to the first account."),
+                Prop("serviceId", "string", "Service ID; defaults to the first service."),
+                Prop("number", "number", "Number from 1 to 99; omit to clear the number."),
+            ]
+        ),
         Tool("get_tray_icon", "Get the rendered tray icon and its display properties."),
         Tool(
             "get_status_layout",

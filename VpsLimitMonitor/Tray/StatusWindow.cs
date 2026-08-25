@@ -254,9 +254,22 @@ public class StatusWindow : Window
                 });
             }
 
-            foreach (var svc in account.Services)
+            var orderedServices = account
+                .Services.Select(
+                    (svc, index) => new
+                    {
+                        Service = svc,
+                        Number = account.GetServiceNumber(svc.Service),
+                        Index = index,
+                    }
+                )
+                .OrderBy(item => item.Number.HasValue ? 0 : 1)
+                .ThenBy(item => item.Number ?? int.MaxValue)
+                .ThenBy(item => item.Index);
+
+            foreach (var item in orderedServices)
             {
-                var card = BuildServiceRow(account, svc);
+                var card = BuildServiceRow(account, item.Service);
                 card.Width = ServiceCardWidth;
                 card.Margin = new Thickness(0, 0, columnSpacing, 4);
                 serviceColumns.Children.Add(card);
@@ -464,7 +477,7 @@ public class StatusWindow : Window
     {
         var panel = new StackPanel { Spacing = 1 };
 
-        var title = svc.Service.Ip ?? "无 IP";
+        var title = account.GetServiceTitle(svc.Service);
         if (svc.Traffic is { IsOnline: false })
             title += "（关机）";
         if (svc.Simulated)
@@ -645,6 +658,29 @@ public class StatusWindow : Window
             IsTabStop = false,
         };
         button.Click += (_, _) => _ = _controller.OpenServiceAsync(account, svc.Service);
+        var setNumberItem = new MenuItem { Header = "设置序号" };
+        setNumberItem.Click += async (_, _) => await SetServiceNumberAsync(account, svc);
+        var clearNumberItem = new MenuItem
+        {
+            Header = "清除序号",
+            IsEnabled = account.GetServiceNumber(svc.Service) != null,
+        };
+        clearNumberItem.Click += (_, _) =>
+            _controller.SetServiceNumber(account, svc.Service, null);
+        button.ContextMenu = new ContextMenu
+        {
+            Items = { setNumberItem, clearNumberItem },
+        };
         return button;
+    }
+
+    private async Task SetServiceNumberAsync(AccountState account, ServiceState svc)
+    {
+        var result = await ServiceNumberDialog.ShowAsync(
+            $"设置服务器序号：{svc.Service.Ip ?? "无 IP"}",
+            account.GetServiceNumber(svc.Service)
+        );
+        if (result is { Confirmed: true })
+            _controller.SetServiceNumber(account, svc.Service, result.Number);
     }
 }

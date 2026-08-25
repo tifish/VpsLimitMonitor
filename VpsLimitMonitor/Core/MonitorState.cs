@@ -27,6 +27,13 @@ public class AccountState(AccountConfig config, WebSession session, IVpsProvider
     public List<ServiceState> Services { get; } = [];
     public int ServerCount => Services.Count;
     public string TitleText => $"{Config.Name}（{ServerCount}）";
+    public int? GetServiceNumber(VpsService service) =>
+        ServerNumberStore.Get(Config, service.Ip);
+    public string GetServiceTitle(VpsService service)
+    {
+        var title = service.Ip ?? "无 IP";
+        return GetServiceNumber(service) is { } number ? $"{number:D2} {title}" : title;
+    }
     public bool LoggedIn { get; set; } = true;
     public bool LoginNotified { get; set; }
 

@@ -178,6 +178,23 @@ public static class McpDebugServer
             case "get_status":
                 return BuildStatusJson();
 
+            case "set_service_number":
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var serviceId = args?["serviceId"]?.GetValue<string>();
+                    var service =
+                        (serviceId == null
+                            ? account.Services.FirstOrDefault()
+                            : account.Services.FirstOrDefault(s => s.Service.Id == serviceId))
+                        ?? throw new InvalidOperationException("Service not found");
+                    int? number = null;
+                    if (args?["number"] is { } numberNode)
+                        number = (int)numberNode.GetValue<double>();
+
+                    _controller.SetServiceNumber(account, service.Service, number);
+                    return BuildStatusJson();
+                }
+
             case "get_tray_icon":
                 return BuildTrayIconJson();
 
@@ -622,6 +639,8 @@ public static class McpDebugServer
                     label = s.Service.Label,
                     name = s.Service.Name,
                     ip = s.Service.Ip,
+                    number = a.GetServiceNumber(s.Service),
+                    title = a.GetServiceTitle(s.Service),
                     dueDate = s.Service.DueDate?.ToString("yyyy-MM-dd"),
                     renewalRemindedOn = s.RenewalRemindedOn?.ToString("yyyy-MM-dd"),
                     usedGB = s.Traffic?.UsedGB,

@@ -479,6 +479,12 @@ public class MonitorController
         RebuildStatusWindow();
     }
 
+    public void SetServiceNumber(AccountState account, VpsService service, int? number)
+    {
+        ServerNumberStore.Set(account.Config, service.Ip, number);
+        RebuildStatusWindow();
+    }
+
     public void SetUpdateCheckInterval(string interval)
     {
         SettingsManager.Settings.UpdateCheckInterval = interval;
