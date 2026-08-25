@@ -398,6 +398,29 @@ public class MonitorController
         _statusWindow?.Rebuild();
     }
 
+    public void EnsureStatusWindowVisible()
+    {
+        if (_statusWindow?.IsVisible == true)
+        {
+            _statusWindow.Rebuild();
+            return;
+        }
+
+        ToggleStatusWindow();
+    }
+
+    public object GetStatusLayoutSnapshot() =>
+        _statusWindow?.GetLayoutSnapshot()
+        ?? new
+        {
+            visible = false,
+            width = 0d,
+            height = 0d,
+            configuredCardWidth = 0d,
+            serviceCardCount = 0,
+            cardBounds = Array.Empty<object>(),
+        };
+
     public bool StatusWindowVisible => _statusWindow?.IsVisible == true;
 
     private void OnSettingsReloaded()

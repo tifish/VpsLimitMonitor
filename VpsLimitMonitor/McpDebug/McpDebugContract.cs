@@ -18,6 +18,11 @@ public static class McpDebugContract
     [
         Tool("get_status", "Get accounts, services, traffic, alerts, and settings."),
         Tool("get_tray_icon", "Get the rendered tray icon and its display properties."),
+        Tool(
+            "get_status_layout",
+            "Show the status panel and return its rendered window and service-card sizes.",
+            [Prop("ensureVisible", "boolean", "Show the status panel before measuring; defaults to true.")]
+        ),
         Tool("refresh", "Run a full poll immediately and return the latest status."),
         Tool(
             "refresh_account",

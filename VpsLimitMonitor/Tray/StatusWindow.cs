@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using VpsLimitMonitor.Core;
 using VpsLimitMonitor.Update;
 
@@ -77,7 +78,9 @@ public class StatusWindow : Window
     }
 
     /// <summary>每台服务器卡片占用的固定宽度，多列排布的列宽。</summary>
-    private const double ServiceCardWidth = 400;
+    private const double ServiceCardWidth = 320;
+    private const double TrafficValueWidth = 112;
+    private const double UsagePercentWidth = 48;
 
     public void Rebuild()
     {
@@ -90,11 +93,16 @@ public class StatusWindow : Window
             MaxWidth = (s.WorkingArea.Width - 24) / s.Scaling;
         }
 
-        var root = new StackPanel { Margin = new Thickness(16), Spacing = 10 };
+        var root = new StackPanel { Margin = new Thickness(12), Spacing = 6 };
 
         // 顶栏：刷新按钮、刷新时间、服务器总数与版本号
-        var topBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var refreshButton = new Button { Content = "立即刷新" };
+        var topBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var refreshButton = new Button
+        {
+            Content = "立即刷新",
+            Padding = new Thickness(8, 4),
+            FontSize = 13,
+        };
         refreshButton.Click += (_, _) => _controller.TriggerRefresh();
         topBar.Children.Add(refreshButton);
         if (_controller.Refreshing)
@@ -137,11 +145,11 @@ public class StatusWindow : Window
         );
         root.Children.Add(topBar);
 
-        const double columnSpacing = 16;
+        const double columnSpacing = 8;
         var columnWidth = ServiceCardWidth + columnSpacing;
 
         root.Measure(Size.Infinity);
-        var accountColumnsMaxHeight = Math.Max(160, maxHeight - root.DesiredSize.Height - 32);
+        var accountColumnsMaxHeight = Math.Max(160, maxHeight - root.DesiredSize.Height - 24);
         var accountsPanel = new StackPanel
         {
             Name = "AccountColumns",
@@ -167,7 +175,7 @@ public class StatusWindow : Window
             var accountGroup = new StackPanel
             {
                 Name = $"AccountGroup{accountIndex}",
-                Spacing = 6,
+                Spacing = 4,
             };
             var serviceColumns = new WrapPanel
             {
@@ -179,15 +187,15 @@ public class StatusWindow : Window
             {
                 Name = $"AccountHeader{accountIndex}",
                 MinWidth = ServiceCardWidth,
-                MinHeight = 36,
-                Margin = new Thickness(0, 0, columnSpacing, 0),
+                MinHeight = 28,
+                Margin = new Thickness(0, 0, columnSpacing, 2),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
             header.Children.Add(
                 new TextBlock
                 {
                     Text = account.TitleText,
-                    FontSize = 18,
+                    FontSize = 16,
                     FontWeight = FontWeight.Bold,
                     VerticalAlignment = VerticalAlignment.Center,
                 }
@@ -220,7 +228,7 @@ public class StatusWindow : Window
                 serviceColumns.Children.Add(new TextBlock
                 {
                     Width = ServiceCardWidth,
-                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Margin = new Thickness(0, 0, columnSpacing, 4),
                     Text = "登录已失效，请重新登录",
                     Foreground = Brushes.OrangeRed,
                 });
@@ -230,7 +238,7 @@ public class StatusWindow : Window
                 serviceColumns.Children.Add(new TextBlock
                 {
                     Width = ServiceCardWidth,
-                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Margin = new Thickness(0, 0, columnSpacing, 4),
                     Text = $"刷新失败：{account.Error}",
                     Foreground = Brushes.OrangeRed,
                     TextWrapping = TextWrapping.Wrap,
@@ -241,7 +249,7 @@ public class StatusWindow : Window
                 serviceColumns.Children.Add(new TextBlock
                 {
                     Width = ServiceCardWidth,
-                    Margin = new Thickness(0, 0, columnSpacing, 6),
+                    Margin = new Thickness(0, 0, columnSpacing, 4),
                     Text = "正在获取服务列表…",
                 });
             }
@@ -250,7 +258,7 @@ public class StatusWindow : Window
             {
                 var card = BuildServiceRow(account, svc);
                 card.Width = ServiceCardWidth;
-                card.Margin = new Thickness(0, 0, columnSpacing, 6);
+                card.Margin = new Thickness(0, 0, columnSpacing, 4);
                 serviceColumns.Children.Add(card);
             }
 
@@ -268,6 +276,76 @@ public class StatusWindow : Window
         };
     }
 
+    public object GetLayoutSnapshot()
+    {
+        var cards = this
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .Where(button => button.Classes.Contains("service-card"))
+            .ToArray();
+        var trafficRows = this
+            .GetVisualDescendants()
+            .OfType<Grid>()
+            .Where(grid => grid.Classes.Contains("traffic-row"))
+            .ToArray();
+        var serviceTitles = this
+            .GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Where(text => text.Classes.Contains("service-title"))
+            .ToArray();
+
+        return new
+        {
+            visible = IsVisible,
+            width = Bounds.Width,
+            height = Bounds.Height,
+            configuredCardWidth = ServiceCardWidth,
+            serviceCardCount = cards.Length,
+            cardBounds = cards
+                .Take(12)
+                .Select(card => new
+                {
+                    width = card.Bounds.Width,
+                    height = card.Bounds.Height,
+                })
+                .ToArray(),
+            trafficLayout = trafficRows
+                .Take(12)
+                .Select(row =>
+                {
+                    var bar = row.Children
+                        .OfType<ProgressBar>()
+                        .FirstOrDefault(control => control.Classes.Contains("traffic-bar"));
+                    var summary = row.Children
+                        .OfType<TextBlock>()
+                        .FirstOrDefault(control =>
+                            control.Classes.Contains("traffic-percent")
+                        );
+                    var barRight = bar == null ? 0 : bar.Bounds.X + bar.Bounds.Width;
+                    var summaryLeft =
+                        summary == null ? row.Bounds.Width : summary.Bounds.X;
+                    return new
+                    {
+                        width = row.Bounds.Width,
+                        barWidth = bar?.Bounds.Width ?? 0,
+                        percentWidth = summary?.Bounds.Width ?? 0,
+                        gap = summaryLeft - barRight,
+                    };
+                })
+                .ToArray(),
+            titleLayout = serviceTitles
+                .Take(12)
+                .Select(title => new
+                {
+                    text = title.Text,
+                    trimming = title.TextTrimming.ToString(),
+                    wrapping = title.TextWrapping.ToString(),
+                    height = title.Bounds.Height,
+                })
+                .ToArray(),
+        };
+    }
+
     /// <summary>供应商库存目标与独立开关，显示在对应供应商标题下方。</summary>
     private Control? BuildStockSection(AccountState account)
     {
@@ -281,8 +359,8 @@ public class StatusWindow : Window
         {
             Name = $"StockMonitor{source.ProviderName}",
             MinWidth = ServiceCardWidth,
-            Margin = new Thickness(0, 0, 16, 0),
-            Spacing = 3,
+            Margin = new Thickness(0, 0, 8, 0),
+            Spacing = 1,
         };
         var header = new DockPanel();
         var toggle = new CheckBox
@@ -384,41 +462,49 @@ public class StatusWindow : Window
 
     private Control BuildServiceRow(AccountState account, ServiceState svc)
     {
-        var panel = new StackPanel { Spacing = 3 };
+        var panel = new StackPanel { Spacing = 1 };
 
-        var title = $"{svc.Service.Label}";
-        if (svc.Service.Ip != null)
-            title += $"  {svc.Service.Ip}";
+        var title = svc.Service.Ip ?? "无 IP";
         if (svc.Traffic is { IsOnline: false })
             title += "（关机）";
         if (svc.Simulated)
             title += "（模拟数据）";
 
-        var titleRow = new DockPanel();
+        var titleRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,112"),
+            MinHeight = 20,
+        };
         var alert = false;
         if (svc.Traffic is { } t)
         {
             alert =
                 t.RemainingPercent
                 < Settings.SettingsManager.Settings.AlertRemainingPercent;
-            var pctLabel = new TextBlock
+            var trafficValue = new TextBlock
             {
-                Text = $"{t.UsedPercent:F1}%",
-                FontWeight = FontWeight.SemiBold,
-                Margin = new Thickness(8, 0, 0, 0),
+                Classes = { "traffic-value" },
+                Text = $"{t.UsedGB:F1} / {t.TotalGB:F0} GB",
+                FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                TextAlignment = TextAlignment.Right,
+                Width = TrafficValueWidth,
+                TextTrimming = TextTrimming.CharacterEllipsis,
             };
-            if (alert)
-                pctLabel.Foreground = Brushes.OrangeRed;
-            DockPanel.SetDock(pctLabel, Dock.Right);
-            titleRow.Children.Add(pctLabel);
+            Grid.SetColumn(trafficValue, 1);
+            titleRow.Children.Add(trafficValue);
         }
-        titleRow.Children.Add(
+        titleRow.Children.Insert(
+            0,
             new TextBlock
             {
+                Classes = { "service-title" },
                 Text = title,
+                FontSize = 13,
                 FontWeight = FontWeight.SemiBold,
-                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextTrimming = TextTrimming.None,
+                TextWrapping = TextWrapping.NoWrap,
                 VerticalAlignment = VerticalAlignment.Center,
             }
         );
@@ -426,35 +512,44 @@ public class StatusWindow : Window
 
         if (svc.Traffic is { } traffic)
         {
+            var trafficRow = new Grid
+            {
+                Classes = { "traffic-row" },
+                ColumnDefinitions = new ColumnDefinitions("*,48"),
+                MinHeight = 18,
+            };
             var bar = new ProgressBar
             {
+                Classes = { "traffic-bar" },
                 Minimum = 0,
                 Maximum = 100,
                 Value = Math.Clamp(traffic.UsedPercent, 0, 100),
-                Height = 8,
+                Height = 6,
+                MinWidth = 48,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 0, 8, 0),
             };
             if (alert)
                 bar.Foreground = Brushes.OrangeRed;
-
-            panel.Children.Add(bar);
-            panel.Children.Add(
-                new TextBlock
-                {
-                    Text =
-                        $"已用 {traffic.UsedGB:F1} / {traffic.TotalGB:F0} GB"
-                        + $" · 剩 {traffic.RemainingGB:F1} GB",
-                }
-            );
-
-            if (traffic.ResetNotice is { } reset)
-                panel.Children.Add(
-                    new TextBlock
-                    {
-                        Text = $"下次重置：{reset}",
-                        FontSize = 12,
-                        Opacity = 0.6,
-                    }
-                );
+            Grid.SetColumn(bar, 0);
+            trafficRow.Children.Add(bar);
+            var pctLabel = new TextBlock
+            {
+                Classes = { "traffic-percent" },
+                Text = $"{traffic.UsedPercent:F1}%",
+                FontSize = 12,
+                FontWeight = FontWeight.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                TextAlignment = TextAlignment.Right,
+                Width = UsagePercentWidth,
+            };
+            if (alert)
+                pctLabel.Foreground = Brushes.OrangeRed;
+            Grid.SetColumn(pctLabel, 1);
+            trafficRow.Children.Add(pctLabel);
+            panel.Children.Add(trafficRow);
         }
         else if (svc.Error != null)
         {
@@ -462,6 +557,7 @@ public class StatusWindow : Window
                 new TextBlock
                 {
                     Text = $"获取失败：{svc.Error}",
+                    FontSize = 12,
                     Foreground = Brushes.OrangeRed,
                     TextWrapping = TextWrapping.Wrap,
                 }
@@ -469,34 +565,81 @@ public class StatusWindow : Window
         }
         else
         {
-            panel.Children.Add(new TextBlock { Text = "等待数据…", Opacity = 0.6 });
+            panel.Children.Add(
+                new TextBlock
+                {
+                    Text = "等待数据…",
+                    FontSize = 12,
+                    Opacity = 0.6,
+                }
+            );
         }
 
+        var auxiliaryText = new List<string>();
+        if (svc.Traffic?.ResetNotice is { } reset)
+            auxiliaryText.Add($"重置 {reset}");
+
+        TextBlock? dueLine = null;
+        var dueIsAlert = false;
         if (svc.Service.DueDate is { } due)
         {
             var days = due.DayNumber - DateOnly.FromDateTime(DateTime.Now).DayNumber;
             var text = days switch
             {
-                < 0 => $"到期：{due:yyyy-MM-dd}（已过期 {-days} 天）",
-                0 => $"到期：{due:yyyy-MM-dd}（今天）",
-                _ => $"到期：{due:yyyy-MM-dd}（剩 {days} 天）",
+                < 0 => $"到期 {due:yyyy-MM-dd}（已过期 {-days} 天）",
+                0 => $"到期 {due:yyyy-MM-dd}（今天）",
+                _ => $"到期 {due:yyyy-MM-dd}（剩 {days} 天）",
             };
-            var line = new TextBlock { Text = text, FontSize = 12, Opacity = 0.6 };
+            dueLine = new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                Opacity = 0.6,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
             if (days <= AlertManager.RenewalReminderDays)
             {
-                line.Foreground = Brushes.OrangeRed;
-                line.Opacity = 1;
-                line.FontWeight = FontWeight.SemiBold;
+                dueIsAlert = true;
+                dueLine.Foreground = Brushes.OrangeRed;
+                dueLine.Opacity = 1;
+                dueLine.FontWeight = FontWeight.SemiBold;
             }
-            panel.Children.Add(line);
+        }
+
+        if (dueLine != null && auxiliaryText.Count > 0)
+        {
+            auxiliaryText.Add(dueLine.Text ?? "");
+            dueLine = null;
+        }
+
+        if (auxiliaryText.Count > 0)
+        {
+            var auxiliaryLine = new TextBlock
+            {
+                Text = string.Join("  |  ", auxiliaryText),
+                FontSize = 11,
+                Opacity = dueIsAlert ? 1 : 0.6,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            if (dueIsAlert)
+            {
+                auxiliaryLine.Foreground = Brushes.OrangeRed;
+                auxiliaryLine.FontWeight = FontWeight.SemiBold;
+            }
+            panel.Children.Add(auxiliaryLine);
+        }
+        else if (dueLine != null)
+        {
+            panel.Children.Add(dueLine);
         }
 
         var button = new Button
         {
+            Classes = { "service-card" },
             Content = panel,
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
-            Padding = new Thickness(0),
+            Padding = new Thickness(4, 2),
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             IsTabStop = false,

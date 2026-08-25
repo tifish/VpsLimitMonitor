@@ -181,6 +181,17 @@ public static class McpDebugServer
             case "get_tray_icon":
                 return BuildTrayIconJson();
 
+            case "get_status_layout":
+                if (args?["ensureVisible"]?.GetValue<bool>() ?? true)
+                    _controller.EnsureStatusWindowVisible();
+                await Dispatcher.UIThread
+                    .InvokeAsync(static () => { }, DispatcherPriority.Render)
+                    .GetTask();
+                return JsonSerializer.Serialize(
+                    _controller.GetStatusLayoutSnapshot(),
+                    PrettyJson
+                );
+
             case "refresh":
                 _controller.TriggerRefresh();
                 await _controller.RefreshAllAsync();
