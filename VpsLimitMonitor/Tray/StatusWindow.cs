@@ -306,6 +306,13 @@ public class StatusWindow : Window
             .OfType<TextBlock>()
             .Where(text => text.Classes.Contains("service-title"))
             .ToArray();
+        var stockRows = this
+            .GetVisualDescendants()
+            .OfType<DockPanel>()
+            .Where(panel =>
+                panel.Name?.StartsWith("StockMonitor", StringComparison.Ordinal) == true
+            )
+            .ToArray();
 
         return new
         {
@@ -346,6 +353,21 @@ public class StatusWindow : Window
                     };
                 })
                 .ToArray(),
+            stockLayout = stockRows
+                .Select(row => new
+                {
+                    name = row.Name,
+                    width = row.Bounds.Width,
+                    height = row.Bounds.Height,
+                    lines = row.Children.Count,
+                    texts = row
+                        .GetVisualDescendants()
+                        .OfType<TextBlock>()
+                        .Select(text => text.Text)
+                        .Where(text => !string.IsNullOrEmpty(text))
+                        .ToArray(),
+                })
+                .ToArray(),
             titleLayout = serviceTitles
                 .Take(12)
                 .Select(title => new
@@ -359,7 +381,7 @@ public class StatusWindow : Window
         };
     }
 
-    /// <summary>供应商库存目标与独立开关，显示在对应供应商标题下方。</summary>
+    /// <summary>供应商库存目标与独立开关，压缩成供应商标题下方的一行。</summary>
     private Control? BuildStockSection(AccountState account)
     {
         var stock = _controller.Stock;
@@ -368,24 +390,12 @@ public class StatusWindow : Window
             return null;
 
         var enabled = stock.IsEnabled(source);
-        var panel = new StackPanel
+        var row = new DockPanel
         {
             Name = $"StockMonitor{source.ProviderName}",
             MinWidth = ServiceCardWidth,
-            Margin = new Thickness(0, 0, 8, 0),
-            Spacing = 1,
+            Margin = new Thickness(0, 0, 8, 2),
         };
-        var header = new DockPanel();
-        var toggle = new CheckBox
-        {
-            Name = $"StockToggle{source.ProviderName}",
-            Content = $"监控 {source.TargetName} 库存",
-            IsChecked = enabled,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        toggle.Click += (_, _) =>
-            _controller.SetStockMonitorEnabled(source.ProviderName, toggle.IsChecked == true);
-        header.Children.Add(toggle);
 
         if (source.LastCheck is { } check)
         {
@@ -397,80 +407,105 @@ public class StatusWindow : Window
                 VerticalAlignment = VerticalAlignment.Center,
             };
             DockPanel.SetDock(checkedAt, Dock.Right);
-            header.Children.Insert(0, checkedAt);
+            row.Children.Add(checkedAt);
         }
-        panel.Children.Add(header);
+
+        var toggle = new CheckBox
+        {
+            Name = $"StockToggle{source.ProviderName}",
+            Content = $"监控 {source.TargetName}",
+            IsChecked = enabled,
+            MinHeight = 0,
+            Padding = new Thickness(6, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        toggle.Click += (_, _) =>
+            _controller.SetStockMonitorEnabled(source.ProviderName, toggle.IsChecked == true);
+        DockPanel.SetDock(toggle, Dock.Left);
+        row.Children.Add(toggle);
+
+        row.Children.Add(BuildStockStatus(account, source, enabled));
+        return row;
+    }
+
+    /// <summary>库存状态：正常时是可点击的套餐链接，其余情况是一行提示文本。</summary>
+    private Control BuildStockStatus(AccountState account, StockSourceState source, bool enabled)
+    {
+        var margin = new Thickness(6, 0, 6, 0);
+
+        TextBlock Hint(string text, IBrush? foreground = null)
+        {
+            var hint = new TextBlock
+            {
+                Name = $"StockStatus{source.ProviderName}",
+                Text = text,
+                Margin = margin,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            if (foreground == null)
+                hint.Opacity = 0.6;
+            else
+                hint.Foreground = foreground;
+            return hint;
+        }
 
         if (!enabled)
+            return Hint("已关闭");
+        if (!account.LoggedIn)
+            return Hint("登录已失效", Brushes.OrangeRed);
+        if (source.Checking)
+            return Hint("检查中…");
+        if (source.Error != null)
+            return Hint($"检查失败：{source.Error}", Brushes.OrangeRed);
+        if (source.Plans.Count == 0)
+            return Hint("等待检查…");
+
+        var plans = new StackPanel
         {
-            panel.Children.Add(new TextBlock { Text = "已关闭", Opacity = 0.6 });
-        }
-        else if (!account.LoggedIn)
+            Orientation = Orientation.Horizontal,
+            Margin = margin,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        foreach (var plan in source.Plans)
         {
-            panel.Children.Add(
-                new TextBlock
-                {
-                    Name = $"StockStatus{source.ProviderName}",
-                    Text = "登录已失效",
-                    Foreground = Brushes.OrangeRed,
-                }
-            );
-        }
-        else if (source.Checking)
-        {
-            panel.Children.Add(new TextBlock { Text = "检查中…", Opacity = 0.6 });
-        }
-        else if (source.Error != null)
-        {
-            panel.Children.Add(
-                new TextBlock
-                {
-                    Text = $"检查失败：{source.Error}",
-                    Foreground = Brushes.OrangeRed,
-                    TextWrapping = TextWrapping.Wrap,
-                }
-            );
-        }
-        else if (source.Plans.Count == 0)
-        {
-            panel.Children.Add(new TextBlock { Text = "等待检查…", Opacity = 0.6 });
-        }
-        else
-        {
-            foreach (var plan in source.Plans)
+            var text = source.Plans.Count > 1 ? $"{plan.Name}：" : "";
+            text += plan.InStock ? "有货" : "售罄";
+            if (source.Simulated)
+                text += "（模拟）";
+            var item = new TextBlock
             {
-                var suffix = source.Simulated ? "（模拟数据）" : "";
-                var item = new TextBlock
-                {
-                    Text = $"{plan.Name}：{(plan.InStock ? "有货" : "售罄")}{suffix}",
-                    Opacity = plan.InStock ? 1 : 0.6,
-                    TextDecorations = TextDecorations.Underline,
-                    TextWrapping = TextWrapping.Wrap,
-                };
-                if (plan.InStock)
-                {
-                    item.Foreground = Brushes.Green;
-                    item.FontWeight = FontWeight.Bold;
-                }
-                var link = new Button
-                {
-                    Name = $"StockLink{source.ProviderName}",
-                    Content = item,
-                    Background = Brushes.Transparent,
-                    BorderBrush = Brushes.Transparent,
-                    Padding = new Thickness(0),
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    Cursor = new Cursor(StandardCursorType.Hand),
-                    IsTabStop = false,
-                };
-                link.Click += (_, _) =>
-                    _ = _controller.OpenStockPageAsync(source.ProviderName);
-                panel.Children.Add(link);
+                Text = text,
+                Opacity = plan.InStock ? 1 : 0.6,
+                TextDecorations = TextDecorations.Underline,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            if (plan.InStock)
+            {
+                item.Foreground = Brushes.Green;
+                item.FontWeight = FontWeight.Bold;
             }
+            var link = new Button
+            {
+                Name = $"StockLink{source.ProviderName}",
+                Content = item,
+                Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                Padding = new Thickness(0),
+                MinHeight = 0,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                IsTabStop = false,
+            };
+            link.Click += (_, _) => _ = _controller.OpenStockPageAsync(source.ProviderName);
+            plans.Children.Add(link);
         }
 
-        return panel;
+        return plans;
     }
 
     private Control BuildServiceRow(AccountState account, ServiceState svc)
