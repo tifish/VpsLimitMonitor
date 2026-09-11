@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using VpsLimitMonitor.Web;
@@ -122,8 +122,16 @@ public partial class IdcSystemKvmProvider(WebSession session) : IVpsProvider
         if (LoginRedirectRegex().IsMatch(res.Url) || LoginRedirectRegex().IsMatch(body))
             throw new SessionExpiredException();
 
+        // The first field is the service's billing status, not a success flag: "0" normal,
+        // "3" 即将到期 and "4" 欠费停机 all still carry the full state payload. Only "-1", the
+        // "0|-1|message" error form, or a non-JSON payload means the panel failed to read the VM.
         var parts = body.Split('|', 3);
-        if (parts.Length != 3 || parts[0] != "0" || !parts[2].TrimStart().StartsWith('{'))
+        if (
+            parts.Length != 3
+            || parts[0] == "-1"
+            || (parts[0] == "0" && parts[1] == "-1")
+            || !parts[2].TrimStart().StartsWith('{')
+        )
             throw new InvalidOperationException($"HostYun state request failed: {body}");
 
         using var doc = JsonDocument.Parse(parts[2]);
@@ -132,7 +140,8 @@ public partial class IdcSystemKvmProvider(WebSession session) : IVpsProvider
             GetNumber(root, "bwusage"),
             GetNumber(root, "plantraffic"),
             "每月月初清零",
-            string.Equals(parts[1], "running", StringComparison.OrdinalIgnoreCase)
+            // Status "4" is 欠费停机: the panel shows it as stopped regardless of the reported state.
+            parts[0] != "4" && string.Equals(parts[1], "running", StringComparison.OrdinalIgnoreCase)
         );
     }
 
