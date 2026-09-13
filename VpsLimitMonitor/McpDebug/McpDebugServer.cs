@@ -403,6 +403,11 @@ public static class McpDebugServer
                         SettingsManager.Settings.HostYunStockMonitorEnabled = hostYunEnabled;
                         stockSettingsChanged = true;
                     }
+                    if (args?["cstoneCloudStockEnabled"]?.GetValue<bool>() is { } cstoneCloudEnabled)
+                    {
+                        SettingsManager.Settings.CstoneCloudStockMonitorEnabled = cstoneCloudEnabled;
+                        stockSettingsChanged = true;
+                    }
                     SettingsManager.Save();
                     if (stockSettingsChanged)
                     {

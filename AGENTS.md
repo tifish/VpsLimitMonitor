@@ -39,10 +39,10 @@ App tools:
 - `clear_simulation` — drop injected data and re-poll real data.
 - `simulate_session_expired` — mark an account as logged-out to test the login-needed flow; refreshes keep treating it as expired until `clear_simulation`.
 - `show_login_window` — open the WebView2 login window for an account.
-- `open_stock_window` — open a provider inventory page in a new embedded browser window; optional `provider` selects NovixLink or HostYun.
-- `set_settings` — change `pollIntervalMinutes` / `alertRemainingPercent` / `novixLinkStockEnabled` / `hostYunStockEnabled`.
+- `open_stock_window` — open a provider inventory page in a new embedded browser window; optional `provider` selects NovixLink, HostYun, or CstoneCloud.
+- `set_settings` — change `pollIntervalMinutes` / `alertRemainingPercent` / `novixLinkStockEnabled` / `hostYunStockEnabled` / `cstoneCloudStockEnabled`.
 - `get_alerts` — recent toast alert records (verifies alerts fired without watching the screen).
-- `check_stock` — force stock checks now and return plan availability; optional `provider` selects NovixLink or HostYun.
+- `check_stock` — force stock checks now and return plan availability; optional `provider` selects NovixLink, HostYun, or CstoneCloud.
 - `simulate_stock` — mark a provider plan (`provider`, optional `plan` substring) as in stock to trigger the restock alert; persists until `clear_simulation`.
 - `get_cookies` — list the account session's cookies for its site (name/domain/session-or-persistent/expiry), for verifying login-cookie persistence.
 - `fetch_url` — fetch a same-origin URL with an account's session and return status, final URL, and body.

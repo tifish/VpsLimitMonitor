@@ -90,7 +90,7 @@ public static class McpDebugContract
         Tool(
             "open_stock_window",
             "Open a provider inventory page in a new embedded browser window.",
-            [Prop("provider", "string", "NovixLink or HostYun; defaults to NovixLink.")]
+            [Prop("provider", "string", "NovixLink, HostYun, or CstoneCloud; defaults to NovixLink.")]
         ),
         Tool("get_browser_windows", "List embedded browser windows opened by account sessions."),
         Tool(
@@ -101,6 +101,7 @@ public static class McpDebugContract
                 Prop("alertRemainingPercent", "number", "Remaining-traffic alert threshold."),
                 Prop("novixLinkStockEnabled", "boolean", "Enable NovixLink Basic stock monitoring."),
                 Prop("hostYunStockEnabled", "boolean", "Enable HostYun plan B stock monitoring."),
+                Prop("cstoneCloudStockEnabled", "boolean", "Enable CstoneCloud CUII-ISP-A stock monitoring."),
             ]
         ),
         Tool("get_alerts", "Get recent toast alert records."),
@@ -136,13 +137,13 @@ public static class McpDebugContract
         Tool(
             "check_stock",
             "Run stock checks immediately.",
-            [Prop("provider", "string", "NovixLink or HostYun; defaults to all providers.")]
+            [Prop("provider", "string", "NovixLink, HostYun, or CstoneCloud; defaults to all providers.")]
         ),
         Tool(
             "simulate_stock",
             "Mark a provider plan as in stock until clear_simulation.",
             [
-                Prop("provider", "string", "NovixLink or HostYun; defaults to NovixLink."),
+                Prop("provider", "string", "NovixLink, HostYun, or CstoneCloud; defaults to NovixLink."),
                 Prop("plan", "string", "Plan-name substring; defaults to the provider target."),
             ]
         ),

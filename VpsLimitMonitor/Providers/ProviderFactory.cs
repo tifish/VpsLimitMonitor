@@ -11,6 +11,7 @@ public static class ProviderFactory
         {
             "WhmcsCubeCloud" => new WhmcsCubeCloudProvider(session),
             "IdcSystemKvm" => new IdcSystemKvmProvider(session),
+            "WhmcsZjmfCloud" => new WhmcsZjmfCloudProvider(session),
             _ => throw new NotSupportedException($"Unknown provider type: {config.Type}"),
         };
     }

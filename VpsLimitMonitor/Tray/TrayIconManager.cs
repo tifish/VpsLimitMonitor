@@ -40,6 +40,7 @@ public class TrayIconManager
     private readonly NativeMenuItem _storageCustomItem;
     private readonly NativeMenuItem _novixLinkStockMonitorItem;
     private readonly NativeMenuItem _hostYunStockMonitorItem;
+    private readonly NativeMenuItem _cstoneCloudStockMonitorItem;
 
     public TrayIconManager(MonitorController controller)
     {
@@ -95,9 +96,18 @@ public class TrayIconManager
             "HostYun 套餐 B",
             StockMonitor.HostYunProviderName
         );
+        _cstoneCloudStockMonitorItem = CreateStockMonitorItem(
+            "CstoneCloud CUII-ISP-A",
+            StockMonitor.CstoneCloudProviderName
+        );
         var stockMenu = new NativeMenuItem("库存监控")
         {
-            Menu = [_novixLinkStockMonitorItem, _hostYunStockMonitorItem],
+            Menu =
+            [
+                _novixLinkStockMonitorItem,
+                _hostYunStockMonitorItem,
+                _cstoneCloudStockMonitorItem,
+            ],
         };
 
         var statusItem = new NativeMenuItem("状态面板");
@@ -153,6 +163,8 @@ public class TrayIconManager
         _novixLinkStockMonitorItem.IsChecked = SettingsManager.Settings.StockMonitorEnabled;
         _hostYunStockMonitorItem.IsChecked =
             SettingsManager.Settings.HostYunStockMonitorEnabled;
+        _cstoneCloudStockMonitorItem.IsChecked =
+            SettingsManager.Settings.CstoneCloudStockMonitorEnabled;
     }
 
     private NativeMenuItem CreateStockMonitorItem(string header, string providerName)

@@ -39,26 +39,38 @@ public class StockMonitor(MonitorController controller)
 {
     public const string NovixLinkProviderName = "NovixLink";
     public const string HostYunProviderName = "HostYun";
+    public const string CstoneCloudProviderName = "CstoneCloud";
 
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(StockMonitor));
     private const string SoldOutMarker = "全部售罄";
     private const string HostYunTargetId = "186";
+    private const string CstoneCloudTargetName = "CUII-ISP-A";
+    private const string CstoneCloudTargetSlug = "cuii-isp-a";
 
     // 直连兜底用。站点若按浏览器指纹拦截，则优先复用同站账号的 WebView2 会话。
     private static readonly HttpClient Http = CreateHttpClient();
+
+    // 不带 cookie、不跟随跳转：只看下单入口的跳转目标，避免往账号购物车里塞商品。
+    private static readonly HttpClient AnonymousNoRedirectHttp = CreateHttpClient(
+        new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
+    );
 
     public List<StockSourceState> Sources { get; } =
     [
         new(NovixLinkProviderName, "WhmcsCubeCloud", "Basic"),
         new(HostYunProviderName, "IdcSystemKvm", "套餐 B"),
+        new(CstoneCloudProviderName, "WhmcsZjmfCloud", CstoneCloudTargetName),
     ];
 
     public bool AnyInStock => Sources.Any(source => source.AnyInStock);
     private CancellationTokenSource _delayCts = new();
 
-    private static HttpClient CreateHttpClient()
+    private static HttpClient CreateHttpClient(HttpMessageHandler? handler = null)
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var client = new HttpClient(handler ?? new HttpClientHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(30),
+        };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 + " (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -112,6 +124,7 @@ public class StockMonitor(MonitorController controller)
         {
             NovixLinkProviderName => SettingsManager.Settings.StockMonitorEnabled,
             HostYunProviderName => SettingsManager.Settings.HostYunStockMonitorEnabled,
+            CstoneCloudProviderName => SettingsManager.Settings.CstoneCloudStockMonitorEnabled,
             _ => false,
         };
 
@@ -120,6 +133,7 @@ public class StockMonitor(MonitorController controller)
         {
             NovixLinkProviderName => SettingsManager.Settings.StockMonitorUrl,
             HostYunProviderName => SettingsManager.Settings.HostYunStockMonitorUrl,
+            CstoneCloudProviderName => SettingsManager.Settings.CstoneCloudStockMonitorUrl,
             _ => "",
         };
 
@@ -167,6 +181,10 @@ public class StockMonitor(MonitorController controller)
             else if (source.ProviderName == HostYunProviderName)
             {
                 parsed = await FetchHostYunPlanAsync(source);
+            }
+            else if (source.ProviderName == CstoneCloudProviderName)
+            {
+                parsed = [(CstoneCloudTargetName, await CheckCstoneCloudInStockAsync(source))];
             }
             else
             {
@@ -257,6 +275,37 @@ public class StockMonitor(MonitorController controller)
         }
 
         return [];
+    }
+
+    /// <summary>
+    ///     CstoneCloud 的商品列表页不显示库存。WHMCS 下单入口有货时 302 到 cart.php?a=confproduct，
+    ///     缺货时停在错误页或跳回别处，因此匿名请求入口、只看跳转目标。
+    /// </summary>
+    private async Task<bool> CheckCstoneCloudInStockAsync(StockSourceState source)
+    {
+        var groupUrl = GetUrl(source).TrimEnd('/');
+        var orderUrl = $"{groupUrl}/{CstoneCloudTargetSlug}";
+        using var response = await AnonymousNoRedirectHttp.GetAsync(orderUrl);
+
+        var status = (int)response.StatusCode;
+        if (status is >= 300 and < 400)
+        {
+            var location = response.Headers.Location?.ToString() ?? "";
+            return location.Contains("a=confproduct", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (status is >= 200 and < 300)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            if (
+                body.Contains("缺货", StringComparison.Ordinal)
+                || body.Contains(SoldOutMarker, StringComparison.Ordinal)
+                || body.Contains("out of stock", StringComparison.OrdinalIgnoreCase)
+            )
+                return false;
+        }
+
+        throw new InvalidOperationException($"CstoneCloud 下单入口返回无法识别的结果：HTTP {status}");
     }
 
     private AccountState? FindAccount(StockSourceState source) =>

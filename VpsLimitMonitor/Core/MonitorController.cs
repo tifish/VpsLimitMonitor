@@ -465,6 +465,9 @@ public class MonitorController
             case StockMonitor.HostYunProviderName:
                 SettingsManager.Settings.HostYunStockMonitorEnabled = enabled;
                 break;
+            case StockMonitor.CstoneCloudProviderName:
+                SettingsManager.Settings.CstoneCloudStockMonitorEnabled = enabled;
+                break;
             default:
                 throw new ArgumentException(
                     $"Unknown stock provider: {providerName}",

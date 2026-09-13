@@ -19,7 +19,7 @@ public class MachineSettings
 public static class SettingsManager
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(SettingsManager));
-    private const int CurrentBuiltInAccountsVersion = 1;
+    private const int CurrentBuiltInAccountsVersion = 2;
 
     public const string AppName = "VpsLimitMonitor";
 
@@ -177,6 +177,18 @@ public static class SettingsManager
         {
             settings.HostYunStockMonitorUrl = AppSettings.DefaultHostYunStockMonitorUrl;
         }
+        settings.CstoneCloudStockMonitorUrl = settings.CstoneCloudStockMonitorUrl?.Trim() ?? "";
+        if (
+            !Uri.TryCreate(
+                settings.CstoneCloudStockMonitorUrl,
+                UriKind.Absolute,
+                out var cstoneCloudStockUri
+            )
+            || cstoneCloudStockUri.Scheme is not ("http" or "https")
+        )
+        {
+            settings.CstoneCloudStockMonitorUrl = AppSettings.DefaultCstoneCloudStockMonitorUrl;
+        }
         if (settings.Theme is not ("System" or "Light" or "Dark"))
             settings.Theme = "System";
         if (settings.UpdateCheckInterval is not ("Every6Hours" or "Daily" or "Weekly" or "None"))
@@ -200,28 +212,36 @@ public static class SettingsManager
             );
         }
 
+        if (Settings.BuiltInAccountsVersion < 1)
+            AddAccountIfMissing("HostYun", "IdcSystemKvm", "https://my.hostyun.com");
+        if (Settings.BuiltInAccountsVersion < 2)
+            AddAccountIfMissing("CstoneCloud", "WhmcsZjmfCloud", "https://cstonecloud.com");
+
+        Settings.BuiltInAccountsVersion = CurrentBuiltInAccountsVersion;
+        return true;
+    }
+
+    private static void AddAccountIfMissing(string name, string type, string baseUrl)
+    {
         if (
-            !Settings.Accounts.Any(account =>
+            Settings.Accounts.Any(account =>
                 string.Equals(
                     account.BaseUrl.TrimEnd('/'),
-                    "https://my.hostyun.com",
+                    baseUrl,
                     StringComparison.OrdinalIgnoreCase
                 )
             )
         )
-        {
-            Settings.Accounts.Add(
-                new AccountConfig
-                {
-                    Name = "HostYun",
-                    Type = "IdcSystemKvm",
-                    BaseUrl = "https://my.hostyun.com",
-                }
-            );
-        }
+            return;
 
-        Settings.BuiltInAccountsVersion = CurrentBuiltInAccountsVersion;
-        return true;
+        Settings.Accounts.Add(
+            new AccountConfig
+            {
+                Name = name,
+                Type = type,
+                BaseUrl = baseUrl,
+            }
+        );
     }
 
     private static void Load()
