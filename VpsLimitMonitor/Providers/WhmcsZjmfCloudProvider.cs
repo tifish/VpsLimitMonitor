@@ -130,10 +130,24 @@ public class WhmcsZjmfCloudProvider(WebSession session) : IVpsProvider
                     var power = parse(all[1]);
                     var product = parse(all[2]);
                     var hostData = product && product.data && product.data.host_data;
+                    // 暂停/终止的服务不再提供模块接口，traffictotal 会回落成产品详情页 HTML，从中取出状态与原因
+                    var serviceStatus = "";
+                    var statusReason = "";
+                    if (!traffic) {
+                        var doc = new DOMParser().parseFromString(all[0].body, "text/html");
+                        var text = function (el) { return el ? (el.textContent || "").replace(/\s+/g, " ").trim() : ""; };
+                        serviceStatus = text(doc.querySelector(".product-status-text"));
+                        doc.querySelectorAll(".product-details h4").forEach(function (h4) {
+                            if (!statusReason && /原因/.test(text(h4)) && h4.nextSibling)
+                                statusReason = (h4.nextSibling.textContent || "").replace(/\s+/g, " ").trim();
+                        });
+                    }
                     __post({
                         loggedOut: !traffic && all[0].url.indexOf("login") >= 0,
                         traffic: traffic,
                         trafficBody: traffic ? "" : all[0].body.slice(0, 300),
+                        serviceStatus: serviceStatus,
+                        statusReason: statusReason,
                         powerStatus: power && power.status === 200 && power.data ? String(power.data.status) : "",
                         resetDay: hostData && hostData.reset_flow_day ? Number(hostData.reset_flow_day) : 0
                     });
@@ -152,6 +166,16 @@ public class WhmcsZjmfCloudProvider(WebSession session) : IVpsProvider
             var body = result.GetProperty("trafficBody").GetString() ?? "";
             if (body.Contains("password", StringComparison.OrdinalIgnoreCase))
                 throw new SessionExpiredException();
+
+            var serviceStatus = result.GetProperty("serviceStatus").GetString();
+            if (!string.IsNullOrEmpty(serviceStatus) && serviceStatus != "已激活")
+            {
+                var reason = result.GetProperty("statusReason").GetString();
+                throw new InvalidOperationException(
+                    string.IsNullOrEmpty(reason) ? $"服务{serviceStatus}" : $"服务{serviceStatus}（{reason}）"
+                );
+            }
+
             throw new InvalidOperationException($"CstoneCloud traffic request failed: {body}");
         }
 
