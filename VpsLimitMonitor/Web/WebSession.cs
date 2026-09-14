@@ -111,6 +111,7 @@ public class WebSession(string baseUrl, string accountName)
         _controller = await _environment.CreateCoreWebView2ControllerAsync(handle);
         _controller.IsVisible = false;
         _webView = _controller.CoreWebView2;
+        EnableAutofill(_webView);
         _webView.WebMessageReceived += OnWebMessageReceived;
         _webView.NavigationCompleted += (_, e) =>
         {
@@ -313,6 +314,7 @@ public class WebSession(string baseUrl, string accountName)
             window.TryGetPlatformHandle()?.Handle
             ?? throw new InvalidOperationException("Failed to get window handle");
         var controller = await _environment!.CreateCoreWebView2ControllerAsync(handle);
+        EnableAutofill(controller.CoreWebView2);
         var host = new BrowserWindowHost(window, controller, url);
         _browserWindows.Add(host);
         window.SizeChanged += (_, _) => UpdateControllerBounds(window, controller);
@@ -326,6 +328,16 @@ public class WebSession(string baseUrl, string accountName)
         window.Show();
         window.Activate();
         controller.CoreWebView2.Navigate(url);
+    }
+
+    /// <summary>
+    ///     开启密码保存与表单自动填充（WebView2 默认关闭密码保存）。
+    ///     密码由 WebView2 加密存放在用户数据目录，下次登录自动填充。
+    /// </summary>
+    private static void EnableAutofill(CoreWebView2 webView)
+    {
+        webView.Settings.IsPasswordAutosaveEnabled = true;
+        webView.Settings.IsGeneralAutofillEnabled = true;
     }
 
     public void HideLoginWindow()
