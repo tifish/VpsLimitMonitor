@@ -31,6 +31,12 @@ internal static class LisaHostProbe
             check("service metadata", list.rows.length === 1 && item.id === "123" && item.name === "Example VPS" &&
                 item.label === "C202609111234" && item.ip === "192.0.2.1");
             check("duplicated hidden due date", item.dueDate === "2026-10-11");
+            var pending = row.replace('<td>有效的</td>', '<td><span class="status status-pending">审核中</span></td>');
+            var mixed = serviceRows('<table id="tableServicesList"><tbody>' + pending + row + '</tbody></table>', url, 200);
+            check("pending orders do not trigger traffic or renewal checks", mixed.rows.length === 1);
+            check("pending-only account is logged in and empty", serviceRows('<table id="tableServicesList"><tbody>' + pending + '</tbody></table>', url, 200).rows.length === 0);
+            var activated = pending.replace('status-pending', 'status-active');
+            check("new VPS appears after activation", serviceRows('<table id="tableServicesList"><tbody>' + activated + '</tbody></table>', url, 200).rows.length === 1);
             var ipv6 = serviceRows('<table id="tableServicesList"><tbody>' + row.replace('192.0.2.1', '2001:db8::1') + '</tbody></table>', url, 200);
             check("IPv6 address", ipv6.rows[0].ip === "2001:db8::1");
             check("empty account", serviceRows('<table id="tableServicesList"><tbody><tr><td>No services</td></tr></tbody></table>', url, 200).rows.length === 0);
@@ -51,13 +57,15 @@ internal static class LisaHostProbe
         {
             ("14.8 GB", 14.8), ("111.92 MB", 111.92 / 1024), ("1.5 TB", 1536d),
             ("1024 KB", 1d / 1024), ("1073741824 B", 1d), ("0 MB", 0d),
+            ("0", 0d), ("0.00", 0d), ("0 Bytes", 0d), ("1 Byte", 1d / 1073741824),
+            ("512 bytes", 512d / 1073741824), ("220.72 KB", 220.72 / 1048576),
         })
         {
             if (Math.Abs(WhmcsLisaHostProvider.ParseSizeGB(text) - expected) > 1e-10)
                 throw new InvalidOperationException($"Unit conversion failed: {text}");
             checks.Add($"units: {text}");
         }
-        foreach (var invalid in new[] { "", "unknown", "-1 GB", "NaN GB", "14.8", "14.8 GB invalid" })
+        foreach (var invalid in new[] { "", "unknown", "-1 GB", "NaN GB", "14.8", "14.8 GB invalid", "0 unknown", "0 Bytes invalid" })
         {
             try
             {
@@ -70,6 +78,11 @@ internal static class LisaHostProbe
             }
             throw new InvalidOperationException($"Invalid size was accepted: {invalid}");
         }
+        using var newVps = JsonDocument.Parse("""{"used":"0","total":"3000 GB","online":true}""");
+        var newTraffic = WhmcsLisaHostProvider.ParseTraffic(newVps.RootElement);
+        if (newTraffic.UsedGB != 0 || newTraffic.TotalGB != 3000 || newTraffic.RemainingPercent != 100)
+            throw new InvalidOperationException("New VPS zero-usage traffic was parsed incorrectly");
+        checks.Add("new VPS zero usage retains its full allowance");
         using var zero = JsonDocument.Parse("""{"used":"0 GB","total":"0 GB","online":true}""");
         var rejectedZero = false;
         try { WhmcsLisaHostProvider.ParseTraffic(zero.RootElement); }

@@ -34,6 +34,8 @@ public partial class WhmcsLisaHostProvider(WebSession session) : IVpsProvider
                 var link = tr.querySelector("a[href*='productdetails']");
                 var id = link && (link.getAttribute("href") || "").match(/[?&]id=(\d+)/);
                 if (!id) return;
+                // Pending orders have no provisioned VPS/traffic; their order date is not a renewal date.
+                if (tr.querySelector(".status-pending")) return;
                 var main = text(tr.querySelector(".service-main"));
                 var ip = main.match(/(?:主)?IP:\s*([0-9a-fA-F.:]+)/i);
                 var label = main.split(/\s+/)[0];
@@ -126,19 +128,25 @@ public partial class WhmcsLisaHostProvider(WebSession session) : IVpsProvider
         return new TrafficInfo(used, total, null, fields.GetProperty("online").GetBoolean());
     }
 
-    [GeneratedRegex(@"^([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB)$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^([0-9]+(?:\.[0-9]+)?)\s*(B|Bytes?|KB|MB|GB|TB)?$", RegexOptions.IgnoreCase)]
     private static partial Regex SizeRegex();
 
     internal static double ParseSizeGB(string text)
     {
         var match = SizeRegex().Match(text.Trim());
         if (!match.Success || !double.TryParse(match.Groups[1].Value, NumberStyles.AllowDecimalPoint,
-                CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value))
-            throw new InvalidOperationException("LisaHost traffic value is missing or invalid");
+                CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value)
+            || (match.Groups[2].Value.Length == 0 && value != 0))
+        {
+            // Include only this short traffic field, never the detail HTML (which contains credentials).
+            var preview = text.Replace('\r', ' ').Replace('\n', ' ');
+            if (preview.Length > 80) preview = preview[..80] + "…";
+            throw new InvalidOperationException($"LisaHost traffic value is missing or invalid: '{preview}'");
+        }
 
         var gb = match.Groups[2].Value.ToUpperInvariant() switch
         {
-            "B" => value / (1024 * 1024 * 1024),
+            "B" or "BYTE" or "BYTES" => value / (1024 * 1024 * 1024),
             "KB" => value / (1024 * 1024),
             "MB" => value / 1024,
             "TB" => value * 1024,
