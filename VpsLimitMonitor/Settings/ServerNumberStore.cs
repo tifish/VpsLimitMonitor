@@ -1,11 +1,10 @@
-using System.Globalization;
 using System.Text;
 using JeekTools;
 
 namespace VpsLimitMonitor.Settings;
 
 /// <summary>
-/// Persists the user-assigned server number and current IP as two-column tab files.
+/// Persists the user-assigned string ID and current IP as two-column tab files.
 /// Each account has its own file, so the files do not need a provider column.
 /// </summary>
 public static class ServerNumberStore
@@ -14,7 +13,7 @@ public static class ServerNumberStore
     private const string IpHeader = "ip";
     private const string StorageDirectoryName = "ServerNumbers";
     private static readonly object Sync = new();
-    private static readonly Dictionary<string, Dictionary<string, int>> Entries =
+    private static readonly Dictionary<string, Dictionary<string, string>> Entries =
         new(StringComparer.OrdinalIgnoreCase);
     private static string _directory = "";
 
@@ -30,7 +29,7 @@ public static class ServerNumberStore
         }
     }
 
-    public static int? Get(AccountConfig account, string? ip)
+    public static string? Get(AccountConfig account, string? ip)
     {
         if (string.IsNullOrWhiteSpace(ip))
             return null;
@@ -42,15 +41,11 @@ public static class ServerNumberStore
         }
     }
 
-    public static void Set(AccountConfig account, string? ip, int? number)
+    public static void Set(AccountConfig account, string? ip, string? number)
     {
         if (string.IsNullOrWhiteSpace(ip))
-            throw new InvalidOperationException("Cannot assign a number to a server without an IP.");
-        if (number is < 1 or > 99)
-            throw new ArgumentOutOfRangeException(
-                nameof(number),
-                "Service number must be between 1 and 99."
-            );
+            throw new InvalidOperationException("Cannot assign an ID to a server without an IP.");
+        number = NormalizeId(number);
 
         var path = GetFilePath(account.Name);
         lock (Sync)
@@ -81,7 +76,14 @@ public static class ServerNumberStore
     private static string GetStorageDirectory() =>
         Path.Combine(_directory, StorageDirectoryName);
 
-    private static Dictionary<string, int> GetEntries(string accountName)
+    internal static string? NormalizeId(string? value)
+    {
+        if (value?.Any(char.IsControl) == true)
+            throw new ArgumentException("ID 不能包含制表符、换行或其他控制字符。", nameof(value));
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static Dictionary<string, string> GetEntries(string accountName)
     {
         if (!Entries.TryGetValue(accountName, out var entries))
         {
@@ -92,9 +94,9 @@ public static class ServerNumberStore
         return entries;
     }
 
-    private static Dictionary<string, int> Load(string accountName)
+    private static Dictionary<string, string> Load(string accountName)
     {
-        var entries = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var entries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(_directory))
             return entries;
 
@@ -105,19 +107,12 @@ public static class ServerNumberStore
         foreach (var row in tab.Rows)
         {
             if (row.Count < 2
-                || string.Equals(row[0], IdHeader, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(row[1], IpHeader, StringComparison.OrdinalIgnoreCase))
+                || (string.Equals(row[0], IdHeader, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(row[1], IpHeader, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
-            if (
-                !int.TryParse(
-                    row[0].Trim(),
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out var number
-                )
-                || number is < 1 or > 99
-            )
+            var number = row[0].Trim();
+            if (number.Length == 0 || number.Any(char.IsControl))
                 continue;
 
             var ip = row[1].Trim();
@@ -128,15 +123,15 @@ public static class ServerNumberStore
         return entries;
     }
 
-    private static void Save(string path, Dictionary<string, int> entries)
+    private static void Save(string path, Dictionary<string, string> entries)
     {
         var rows = new List<string> { $"{IdHeader}\t{IpHeader}" };
         rows.AddRange(
             entries
-                .OrderBy(pair => pair.Value)
+                .OrderBy(pair => pair.Value, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(pair =>
-                    $"{pair.Value.ToString("D2", CultureInfo.InvariantCulture)}\t{pair.Key}"
+                    $"{pair.Value}\t{pair.Key}"
                 )
         );
 

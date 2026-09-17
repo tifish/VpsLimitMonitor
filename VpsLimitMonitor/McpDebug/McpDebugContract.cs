@@ -17,13 +17,27 @@ public static class McpDebugContract
     public static IReadOnlyList<McpDebugTool> AppTools { get; } =
     [
         Tool("get_status", "Get accounts, services, traffic, alerts, and settings."),
+        Tool("test_lisahost_parser", "Run LisaHost DOM, date, traffic-unit, and invalid-response regression checks without changing account data."),
+        Tool("test_service_ids", "Test string server ID persistence, legacy IDs, and invalid input using a temporary file."),
         Tool(
-            "set_service_number",
-            "Set or clear a persisted two-digit status-panel server number.",
+            "show_service_number_dialog",
+            "Open the server ID editor used by the status panel.",
             [
                 Prop("account", "string", "Account name; defaults to the first account."),
                 Prop("serviceId", "string", "Service ID; defaults to the first service."),
-                Prop("number", "number", "Number from 1 to 99; omit to clear the number."),
+            ]
+        ),
+        Tool(
+            "set_service_number",
+            "Set or clear a persisted string server ID shown on the status panel.",
+            [
+                Prop("account", "string", "Account name; defaults to the first account."),
+                Prop("serviceId", "string", "Service ID; defaults to the first service."),
+                new KeyValuePair<string, JsonNode?>("number", new JsonObject
+                {
+                    ["type"] = new JsonArray("string", "number", "null"),
+                    ["description"] = "String ID, e.g. JP 01 or 001; omit, null, or blank to clear. Legacy integer 1-99 inputs are formatted as two digits.",
+                }),
             ]
         ),
         Tool("get_tray_icon", "Get the rendered tray icon and its display properties."),

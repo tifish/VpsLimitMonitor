@@ -2,18 +2,20 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using VpsLimitMonitor.Settings;
 
 namespace VpsLimitMonitor.Tray;
 
-public sealed record ServiceNumberDialogResult(bool Confirmed, int? Number);
+public sealed record ServiceNumberDialogResult(bool Confirmed, string? Number);
 
 public static class ServiceNumberDialog
 {
-    public static Task<ServiceNumberDialogResult?> ShowAsync(string title, int? currentNumber)
+    public static Task<ServiceNumberDialogResult?> ShowAsync(string title, string? currentNumber)
     {
         var tcs = new TaskCompletionSource<ServiceNumberDialogResult?>();
         var window = new Window
         {
+            Name = "ServiceIdDialog",
             Title = title,
             Width = 360,
             SizeToContent = SizeToContent.Height,
@@ -24,12 +26,13 @@ public static class ServiceNumberDialog
         };
         var input = new TextBox
         {
-            Text = currentNumber?.ToString("D2") ?? "",
-            MaxLength = 2,
-            PlaceholderText = "01 - 99",
+            Name = "ServiceIdInput",
+            Text = currentNumber ?? "",
+            PlaceholderText = "例如 JP 01、香港备用、001",
         };
         var error = new TextBlock
         {
+            Name = "ServiceIdError",
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
@@ -47,21 +50,28 @@ public static class ServiceNumberDialog
             window.Close();
         }
 
-        var save = new Button { Content = "保存", MinWidth = 80 };
+        var save = new Button { Name = "SaveServiceId", Content = "保存", MinWidth = 80 };
         save.Click += (_, _) =>
         {
-            if (!int.TryParse(input.Text, out var number) || number is < 1 or > 99)
+            string? number;
+            try
             {
-                error.Text = "请输入 01 到 99 之间的序号。";
+                number = ServerNumberStore.NormalizeId(input.Text);
+                if (number == null)
+                    throw new ArgumentException("请输入服务器 ID，或点击“清除”。");
+            }
+            catch (ArgumentException ex)
+            {
+                error.Text = ex.Message;
                 error.IsVisible = true;
                 return;
             }
 
             Complete(new ServiceNumberDialogResult(true, number));
         };
-        var clear = new Button { Content = "清除", MinWidth = 80 };
+        var clear = new Button { Name = "ClearServiceId", Content = "清除", MinWidth = 80 };
         clear.Click += (_, _) => Complete(new ServiceNumberDialogResult(true, null));
-        var cancel = new Button { Content = "取消", MinWidth = 80 };
+        var cancel = new Button { Name = "CancelServiceId", Content = "取消", MinWidth = 80 };
         cancel.Click += (_, _) => Complete(new ServiceNumberDialogResult(false, null));
         buttons.Children.Add(save);
         buttons.Children.Add(clear);
@@ -73,7 +83,7 @@ public static class ServiceNumberDialog
             Spacing = 10,
             Children =
             {
-                new TextBlock { Text = "服务器序号", FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = "服务器 ID", FontWeight = FontWeight.SemiBold },
                 input,
                 error,
                 buttons,

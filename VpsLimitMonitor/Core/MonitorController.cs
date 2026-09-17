@@ -482,7 +482,17 @@ public class MonitorController
         RebuildStatusWindow();
     }
 
-    public void SetServiceNumber(AccountState account, VpsService service, int? number)
+    public async Task EditServiceNumberAsync(AccountState account, VpsService service)
+    {
+        var result = await ServiceNumberDialog.ShowAsync(
+            $"设置服务器 ID：{service.Ip ?? "无 IP"}",
+            account.GetServiceNumber(service)
+        );
+        if (result is { Confirmed: true })
+            SetServiceNumber(account, service, result.Number);
+    }
+
+    public void SetServiceNumber(AccountState account, VpsService service, string? number)
     {
         ServerNumberStore.Set(account.Config, service.Ip, number);
         RebuildStatusWindow();

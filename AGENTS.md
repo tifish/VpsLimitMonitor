@@ -31,6 +31,12 @@ Standard object-path tools from `McpHost` (roots: `Controller`, `Settings`, `App
 
 App tools:
 
+- `set_service_number` — set a string server ID through `number` (e.g. `JP 01`); null/blank clears it. Legacy numeric inputs 1–99 still produce two-digit IDs.
+- `show_service_number_dialog` — open the actual status-panel server ID editor for an account/service.
+- `test_service_ids` — test string ID persistence, legacy IDs, and invalid input using a temporary file.
+
+- `test_lisahost_parser` — run LisaHost DOM, date, traffic-unit, and invalid-response regression checks without changing account data.
+
 - `get_status` — full dump of accounts, services, traffic, alerts, and settings.
 - `refresh` — force a full poll now and return the latest status.
 - `simulate_traffic` — inject fake traffic (`usedGB`, optional `totalGB`, `account`, `serviceId`) to trigger alert logic; the injected value survives until `clear_simulation`.

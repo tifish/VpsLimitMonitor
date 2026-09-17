@@ -19,7 +19,7 @@ public class MachineSettings
 public static class SettingsManager
 {
     private static readonly ILogger Log = LogManager.CreateLogger(nameof(SettingsManager));
-    private const int CurrentBuiltInAccountsVersion = 2;
+    private const int CurrentBuiltInAccountsVersion = 3;
 
     public const string AppName = "VpsLimitMonitor";
 
@@ -216,6 +216,8 @@ public static class SettingsManager
             AddAccountIfMissing("HostYun", "IdcSystemKvm", "https://my.hostyun.com");
         if (Settings.BuiltInAccountsVersion < 2)
             AddAccountIfMissing("CstoneCloud", "WhmcsZjmfCloud", "https://cstonecloud.com");
+        if (Settings.BuiltInAccountsVersion < 3)
+            AddAccountIfMissing("LisaHost", "WhmcsLisaHost", "https://lisahost.com");
 
         Settings.BuiltInAccountsVersion = CurrentBuiltInAccountsVersion;
         return true;

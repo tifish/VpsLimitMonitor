@@ -2,6 +2,10 @@
 
 Windows 托盘 VPS 流量监视器：轮询 VPS 面板的流量数据，托盘图标实时显示已用流量百分比，剩余低于阈值时弹出 Toast 报警；会话失效时提醒重新登录（WebView2 登录窗口）。
 
+内置支持 NovixLink、HostYun、CstoneCloud 和 LisaHost。LisaHost 支持服务列表、IP、到期日、已用/总流量及运行状态；首次使用时从托盘菜单打开网站登录。
+
+服务器卡片右键可设置字符串 ID（如 `JP 01`、`香港备用`、`001`）。ID 保存在当前配置目录的 `ServerNumbers/<账号名>.tab`，以 IP 匹配；有 ID 的服务器优先按 ID 文本排序。原有数字编号文件继续有效。
+
 ## 安装
 
 ```powershell

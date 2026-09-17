@@ -178,6 +178,24 @@ public static class McpDebugServer
             case "get_status":
                 return BuildStatusJson();
 
+            case "test_lisahost_parser":
+                var lisaHost = _controller.Accounts.FirstOrDefault(a => a.Provider is WhmcsLisaHostProvider)
+                    ?? throw new InvalidOperationException("LisaHost account not found");
+                return JsonSerializer.Serialize(await LisaHostProbe.RunAsync(lisaHost.Session), PrettyJson);
+
+            case "test_service_ids":
+                return JsonSerializer.Serialize(ServiceIdProbe.Run(), PrettyJson);
+
+            case "show_service_number_dialog":
+                {
+                    var account = FindAccount(args?["account"]?.GetValue<string>());
+                    var serviceId = args?["serviceId"]?.GetValue<string>();
+                    var service = account.Services.FirstOrDefault(s => serviceId == null || s.Service.Id == serviceId)
+                        ?? throw new InvalidOperationException("Service not found");
+                    _ = _controller.EditServiceNumberAsync(account, service.Service);
+                    return "Server ID editor opened";
+                }
+
             case "set_service_number":
                 {
                     var account = FindAccount(args?["account"]?.GetValue<string>());
@@ -187,9 +205,18 @@ public static class McpDebugServer
                             ? account.Services.FirstOrDefault()
                             : account.Services.FirstOrDefault(s => s.Service.Id == serviceId))
                         ?? throw new InvalidOperationException("Service not found");
-                    int? number = null;
-                    if (args?["number"] is { } numberNode)
-                        number = (int)numberNode.GetValue<double>();
+                    string? number = null;
+                    if (args?["number"] is JsonValue numberNode)
+                    {
+                        if (numberNode.TryGetValue<string>(out var text))
+                            number = text;
+                        else if (numberNode.TryGetValue<int>(out var legacy) && legacy is >= 1 and <= 99)
+                            number = legacy.ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
+                        else
+                            throw new ArgumentException("Use a string ID or a legacy integer from 1 to 99.");
+                    }
+                    else if (args?["number"] != null)
+                        throw new ArgumentException("Use a string ID or null to clear.");
 
                     _controller.SetServiceNumber(account, service.Service, number);
                     return BuildStatusJson();
@@ -634,6 +661,7 @@ public static class McpDebugServer
                 titleText = a.TitleText,
                 serverCount = a.ServerCount,
                 baseUrl = a.Config.BaseUrl,
+                serverNumberFile = ServerNumberStore.GetFilePath(a.Config.Name),
                 loggedIn = a.LoggedIn,
                 simulateExpired = a.SimulateExpired,
                 error = a.Error,
